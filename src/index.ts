@@ -240,7 +240,7 @@ program
             lastProcessed = info.processed;
             lastUploaded = info.uploaded;
             lastTotal = info.total;
-            const rel = info.filePath.startsWith(watchRoot)
+            const rel = info.filePath?.startsWith(watchRoot)
               ? path.relative(watchRoot, info.filePath)
               : (info.filePath ?? "");
             spinner.text = `Indexing files (${lastProcessed}/${lastTotal}) • uploaded ${lastUploaded} ${rel}`;

@@ -12,6 +12,7 @@
     "format": "biome check --write .",
     "format:check": "biome check .",
     "lint": "biome lint --check .",
+    "typecheck": "tsc --noEmit",
     "prepare": "husky"
   },
   "keywords": [],
