@@ -25,12 +25,12 @@ function formatChunk(chunk: ChunkType) {
   let line_range = "";
   switch (chunk.type) {
     case "text":
-      line_range = `:${chunk.generated_metadata?.start_line}-${(chunk.generated_metadata?.start_line as number) + (chunk.generated_metadata?.num_lines as number)}`;
+      line_range = `:${chunk.generated_metadata?.start_line}-${(chunk.generated_metadata?.start_line as number) + (chunk.generated_metadata?.num_lines as number)}:${chunk.text}`;
       break;
     case "image_url":
       line_range =
         chunk.generated_metadata?.type === "pdf"
-          ? `:${chunk.generated_metadata?.page_number}`
+          ? `:${chunk.chunk_index + 1}`
           : "";
       break;
     case "audio_url":
@@ -58,6 +58,9 @@ export const search: Command = new CommanderCommand("search")
   .allowExcessArguments(true)
   .action(async (pattern, exec_path, _options, cmd) => {
     const options: { store: string; m: string } = cmd.optsWithGlobals();
+    if (exec_path?.startsWith("--")) {
+      exec_path = "";
+    }
 
     await ensureAuthenticated();
 
