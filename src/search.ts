@@ -71,6 +71,9 @@ export const search: Command = new CommanderCommand("search")
         query: pattern,
         store_identifiers: [options.store],
         top_k: parseInt(options.m),
+        search_options: {
+          rerank: true,
+        },
         filters: {
           all: [
             {
