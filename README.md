@@ -50,8 +50,15 @@ agents.
     mgrep <pattern> [path]
     ```
 
-    The `search` command, which is also the default command, supports all grep
-    arguments. It might ignore some arguments, it won't throw an error. 
+### Search
+
+The `search` command, which is also the default command, supports all grep
+arguments. It might ignore some arguments, it won't throw an error.
+
+- `mgrep "hello world"`: Search for the pattern `hello world` in the current directory.
+- `mgrep "hello world" path/to/search`: Search for the pattern `hello world` in
+  the `path/to/search` directory.
+- `mgrep "hello world" -m 10`: Search for the pattern `hello world` in the current directory and return up to 10 results.
 
 ## Development
 
