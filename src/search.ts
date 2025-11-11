@@ -19,9 +19,24 @@ type ChunkType =
 
 function formatChunk(chunk: ChunkType) {
   const path = (chunk.metadata as FileMetadata)?.path ?? "Unknown path";
-  const line_range = chunk.generated_metadata?.start_line
-    ? `:${chunk.generated_metadata?.start_line}:${(chunk.generated_metadata?.start_line as number) + (chunk.generated_metadata?.num_lines as number)}`
-    : "";
+  let line_range = "";
+  switch (chunk.type) {
+    case "text":
+      line_range = `:${chunk.generated_metadata?.start_line}-${(chunk.generated_metadata?.start_line as number) + (chunk.generated_metadata?.num_lines as number)}`;
+      break;
+    case "image_url":
+      line_range =
+        chunk.generated_metadata?.type === "pdf"
+          ? `:${chunk.generated_metadata?.page_number}`
+          : "";
+      break;
+    case "audio_url":
+      line_range = "";
+      break;
+    case "video_url":
+      line_range = "";
+      break;
+  }
   return `${path}${line_range}`;
 }
 
