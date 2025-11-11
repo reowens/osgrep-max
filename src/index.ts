@@ -52,6 +52,15 @@ program
       let lastUploaded = 0;
       let lastTotal = 0;
       try {
+        try {
+          await mxbai.stores.retrieve(options.store);
+        } catch {
+          await mxbai.stores.create({
+            name: options.store,
+            description:
+              "MGrep store - Mixedbreads mulitmodal mulitlingual magic search",
+          });
+        }
         const result = await initialSync(
           mxbai,
           options.store,
