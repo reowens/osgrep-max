@@ -47,12 +47,17 @@ export const search: Command = new CommanderCommand("search")
   .description("File pattern searcher")
   .option("-i", "Makes the search case-insensitive", false)
   .option("-r", "Recursive search", false)
+  .option(
+    "-m <max_count>, --max-count <max_count>",
+    "The maximum number of results to return",
+    "10",
+  )
   .argument("<pattern>", "The pattern to search for")
   .argument("[path]", "The path to search in")
   .allowUnknownOption(true)
   .allowExcessArguments(true)
   .action(async (pattern, exec_path, _options, cmd) => {
-    const options: { store: string } = cmd.optsWithGlobals();
+    const options: { store: string; m: string } = cmd.optsWithGlobals();
 
     await ensureAuthenticated();
 
@@ -65,6 +70,7 @@ export const search: Command = new CommanderCommand("search")
       const results = await mxbai.stores.search({
         query: pattern,
         store_identifiers: [options.store],
+        top_k: parseInt(options.m),
         filters: {
           all: [
             {
