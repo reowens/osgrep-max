@@ -1,6 +1,15 @@
 {
   "name": "@mixedbread/mgrep",
-  "version": "0.0.7",
+  "version": "0.0.8",
+  "author": "Mixedbread <support@mixedbread.com>",
+  "homepage": "https://www.mixedbread.com/",
+  "bugs": {
+    "url": "https://github.com/mixedbread-ai/mgrep/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "github:mixedbread-ai/mgrep"
+  },
   "main": "index.js",
   "bin": {
     "mgrep": "dist/index.js"
@@ -16,9 +25,19 @@
     "typecheck": "tsc --noEmit",
     "prepare": "npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "mixedbread",
+    "search",
+    "grep",
+    "glob",
+    "search",
+    "search"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "Apache-2.0",
   "description": "",
   "dependencies": {
     "@clack/prompts": "^0.11.0",
