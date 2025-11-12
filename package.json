@@ -12,8 +12,7 @@
     "format": "biome check --write .",
     "format:check": "biome check .",
     "lint": "biome lint --check .",
-    "typecheck": "tsc --noEmit",
-    "prepare": "node node_modules/typescript/bin/tsc || true"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
