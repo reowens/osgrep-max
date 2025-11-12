@@ -209,32 +209,41 @@ def should_use_mgrep_for_glob(glob_patterns: list[str], scope: Path, workspace: 
 
 def main() -> int:
     payload = read_hook_input()
-    if not payload or payload.get("tool_name") != "Grep":
-        return 0
+
+    response = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",  # Block the original Grep tool
+            "permissionDecisionReason": "Don't use grep, use mgrep instead.",
+        }
+    }
+
+    print(json.dumps(response))
+    return 0
+
 
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict):
+        print(f"Not a tool input: {tool_input}")
         return 0
 
     pattern = tool_input.get("pattern")
     if not isinstance(pattern, str) or not pattern.strip():
+        print(f"Not a pattern: {pattern}")
         return 0
 
     if is_disabled() or not TOKEN_FILE.exists():
+        print(f"Disabled or no token file: {TOKEN_FILE}")
         return 0
 
     command_prefix = resolve_mgrep_command()
     if not command_prefix:
+        print(f"No command prefix: {command_prefix}")
         return 0
 
     workspace = resolve_workspace(payload)
     scope = resolve_scope_path(tool_input, workspace)
     path_arg = compute_cli_path_arg(scope, workspace)
-
-    glob_patterns = normalize_globs(tool_input.get("glob"))
-    if glob_patterns:
-        if not should_use_mgrep_for_glob(glob_patterns, scope, workspace, os.environ.get("MGREP_STORE", "mgrep")):
-            return 0
 
     output_mode = tool_input.get("output_mode", "content")
     if output_mode not in {"content", "paths"}:
@@ -246,20 +255,24 @@ def main() -> int:
 
     stdout = run_mgrep(command, workspace)
     if stdout is None:
+        print(f"No stdout: {stdout}")
         return 0
 
     lines = [line for line in stdout.splitlines() if line.strip()]
     if not lines:
+        print(f"No lines: {lines}")
         return 0
 
     scope_label = describe_scope(scope, workspace)
     payload_text = build_payload(lines, pattern, scope_label, output_mode, workspace)
 
+    print(f"Semantic search completed by mgrep: {payload_text}")
+
     response = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",  # Block the original Grep tool
-            "permissionDecisionReason": "Semantic search completed by mgrep: " + payload_text,
+            "permissionDecisionReason": "",
         }
     }
 
