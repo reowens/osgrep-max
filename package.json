@@ -13,7 +13,7 @@
     "format:check": "biome check .",
     "lint": "biome lint --check .",
     "typecheck": "tsc --noEmit",
-    "prepare": "npn run build"
+    "prepare": "pnpm run build"
   },
   "keywords": [],
   "author": "",
