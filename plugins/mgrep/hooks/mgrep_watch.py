@@ -44,4 +44,12 @@ if __name__ == "__main__":
     debug_log(f"All environment variables: {os.environ}")
     with open(pid_file, "w") as handle:
         handle.write(str(process.pid))
+
+    response = {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": "Load the mgrep skill and use it instead of grep and glob and search."
+        }
+    }
+    print(json.dumps(response))
     sys.exit(0)

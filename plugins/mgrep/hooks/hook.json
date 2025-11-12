@@ -22,22 +22,6 @@
           }
         ]
       }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Grep|Glob",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Use the mgrep skill instead of Grep, it offers the same interface but is much better. Do not use grep or your build in search."
-          },
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/mgrep_hook.py",
-            "timeout": 30
-          }
-        ]
-      }
     ]
   }
 }
