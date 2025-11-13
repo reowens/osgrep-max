@@ -1,10 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { cancel, confirm, isCancel } from "@clack/prompts";
 import type { Mixedbread } from "@mixedbread/sdk";
 import pLimit from "p-limit";
+import { filterRepoFiles, getDirectoryFiles } from "./lib/git";
 import { loginAction } from "./login";
 import { getStoredToken } from "./token";
 import type { FileMetadata } from "./types";
@@ -19,113 +19,6 @@ export function computeFileHash(
 ): string {
   const buffer = readFileSyncFn(filePath);
   return computeBufferHash(buffer);
-}
-
-// Cache for git repository status per directory
-const gitRepoCache = new Map<string, boolean>();
-
-function isGitRepository(dir: string): boolean {
-  // Normalize the directory path for consistent cache keys
-  const normalizedDir = path.resolve(dir);
-
-  // Check cache first
-  if (gitRepoCache.has(normalizedDir)) {
-    return gitRepoCache.get(normalizedDir)!;
-  }
-
-  let isGit = false;
-  try {
-    const result = spawnSync("git", ["rev-parse", "--git-dir"], {
-      cwd: dir,
-      encoding: "utf-8",
-    });
-    isGit = result.status === 0 && !result.error;
-  } catch {
-    isGit = false;
-  }
-
-  // Cache the result
-  gitRepoCache.set(normalizedDir, isGit);
-  return isGit;
-}
-
-function isHiddenFile(filePath: string, root: string): boolean {
-  const relativePath = path.relative(root, filePath);
-  const parts = relativePath.split(path.sep);
-  return parts.some(
-    (part) => part.startsWith(".") && part !== "." && part !== "..",
-  );
-}
-
-function getAllFilesRecursive(dir: string, root: string): string[] {
-  const files: string[] = [];
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-
-      // Skip hidden files and directories
-      if (isHiddenFile(fullPath, root)) {
-        continue;
-      }
-
-      if (entry.isDirectory()) {
-        files.push(...getAllFilesRecursive(fullPath, root));
-      } else if (entry.isFile()) {
-        files.push(fullPath);
-      }
-    }
-  } catch {
-    // Ignore errors (permissions, etc.)
-  }
-  return files;
-}
-
-export function getDirectoryFiles(dirRoot: string): string[] {
-  // Try to use git if available
-  if (isGitRepository(dirRoot)) {
-    const run = (args: string[]) => {
-      const res = spawnSync("git", args, { cwd: dirRoot, encoding: "utf-8" });
-      if (res.error) return "";
-      return res.stdout as string;
-    };
-
-    // Tracked files
-    const tracked = run(["ls-files", "-z"]).split("\u0000").filter(Boolean);
-
-    // Untracked but not ignored
-    const untracked = run(["ls-files", "--others", "--exclude-standard", "-z"])
-      .split("\u0000")
-      .filter(Boolean);
-
-    const allRel = Array.from(new Set([...tracked, ...untracked]));
-    return allRel.map((rel) => path.join(dirRoot, rel));
-  }
-
-  // Fall back to recursive file system traversal
-  return getAllFilesRecursive(dirRoot, dirRoot);
-}
-
-export function isIgnoredByGit(filePath: string, repoRoot: string): boolean {
-  // Always ignore hidden files
-  if (isHiddenFile(filePath, repoRoot)) {
-    return true;
-  }
-
-  // Use git ignore if git is available
-  if (isGitRepository(repoRoot)) {
-    try {
-      const result = spawnSync("git", ["check-ignore", "-q", "--", filePath], {
-        cwd: repoRoot,
-      });
-      return result.status === 0;
-    } catch {
-      // If git check fails, don't ignore (we already checked for hidden files)
-      return false;
-    }
-  }
-
-  return false;
 }
 
 export function isDevelopment(): boolean {
@@ -164,21 +57,6 @@ export async function listStoreFileHashes(
       : undefined;
   } while (after);
   return byExternalId;
-}
-
-export function filterRepoFiles(files: string[], repoRoot: string): string[] {
-  const filtered: string[] = [];
-  for (const filePath of files) {
-    try {
-      const stat = fs.statSync(filePath);
-      if (!stat.isFile()) continue;
-    } catch {
-      continue;
-    }
-    if (isIgnoredByGit(filePath, repoRoot)) continue;
-    filtered.push(filePath);
-  }
-  return filtered;
 }
 
 export async function ensureAuthenticated(): Promise<void> {
