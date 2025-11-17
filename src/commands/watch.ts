@@ -12,7 +12,9 @@ export const watch = new Command("watch")
 
     try {
       const store = await createStore();
-      const fileSystem = createFileSystem();
+      const fileSystem = createFileSystem({
+        ignorePatterns: ["*.lock", "*.bin", "*.ipynb", "*.pyc"],
+      });
       const watchRoot = process.cwd();
 
       const spinner = ora({ text: "Indexing files..." }).start();
