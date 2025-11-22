@@ -202,20 +202,22 @@ export const search: Command = new CommanderCommand("search")
         },
       );
 
-      // Hint if store is empty
+      // Hint if no results found
       if (results.data.length === 0) {
         if (!didSync) {
           try {
             const info = await store.getInfo(options.store);
             if (info.counts.pending === 0 && info.counts.in_progress === 0) {
+              // Store exists but no results - might need re-indexing if files changed
               console.log(
-                "No results found. If this is your first search, run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
+                "No results found. If files have changed, you can re-index with 'osgrep index' or 'osgrep search --sync \"<query>\"'.\n",
               );
             }
           } catch {
-            // Store doesn't exist yet
+            // Store doesn't exist yet - this shouldn't happen since ensureStoreExists creates it
+            // but if it does, auto-sync will handle it on next run
             console.log(
-              "No index found. Run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
+              "No results found. The repository will be automatically indexed on your next search.\n",
             );
           }
         }
