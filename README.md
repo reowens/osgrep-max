@@ -11,14 +11,6 @@ Natural-language search that works like `grep`. Fast, local, and works with codi
 - 100% local embeddings via `transformers.js`
 - Integrates with coding agents
 
-```bash
-# index once
-osgrep index
-
-# then ask your repo things in natural language
-osgrep "where do we set up auth?"
-```
-
 ## Quick Start
 
 1. **Install**
@@ -32,19 +24,15 @@ osgrep "where do we set up auth?"
    ```
    Downloads models (~150MB) so your first search is instant. Skip this if you prefer—models download automatically on first use.
 
-3. **Index a project**
+3. **Start searching**
    ```bash
    cd path/to/repo
-   osgrep index
-   ```
-   `index` performs a one-time sync, respects `.gitignore`, and creates a local searchable index.
-
-4. **Search anything**
-   ```bash
    osgrep "where do we set up auth?" src/lib
    osgrep -m 25 "store schema"
    ```
-   Searches default to the current working directory unless you pass a path.
+   Your first search will automatically index the repository. Subsequent searches are fast and use the cached index. Searches default to the current working directory unless you pass a path.
+
+   **Optional:** Manually index with `osgrep index` if you want to pre-index or refresh the index.
 
 Today, osgrep works great on: code and text documents.  
 **Coming soon:** PDFs, images, audio, and video.
@@ -53,8 +41,8 @@ Today, osgrep works great on: code and text documents.
 
 **Claude Code**  
 1. Run `osgrep install-claude-code`
-2. Run `osgrep index` to index your repository
-3. Open Claude Code, enable the plugin, and point it at your indexed repo
+2. Open Claude Code, enable the plugin, and point it at your repository
+3. The repository will be automatically indexed on first use, or run `osgrep index` to pre-index
 4. Results stream into the chat with file paths and line hints
   
 More agents coming soon (Codex, Cursor, Windsurf, etc.).
@@ -99,8 +87,9 @@ osgrep --sync "latest auth changes"  # always fresh but slower
 ```
 
 **Workflow:**
-- `osgrep --sync "query"` = always fresh but slower
-- `osgrep index` then `osgrep "query"` = fast repeated searches
+- `osgrep "query"` = auto-indexes on first run, then fast repeated searches
+- `osgrep --sync "query"` = always fresh but slower (forces re-index before search)
+- `osgrep index` = manually pre-index or refresh the index
 
 ### osgrep setup
 
@@ -112,7 +101,7 @@ osgrep setup
 
 ### osgrep index
 
-Indexes the current repository and creates a local searchable store. Run once per repository or when refreshing the index.
+Manually indexes the current repository and creates a local searchable store. This is optional—the first search will automatically index if needed. Use this command to pre-index or refresh the index after large changes.
 
 It respects the current `.gitignore`, as well as a `.osgrepignore` file in the
 root of the repository. The `.osgrepignore` file follows the same syntax as the
