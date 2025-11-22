@@ -12,7 +12,7 @@ import {
   createIndexingSpinner,
   formatDryRunSummary,
 } from "../lib/sync-helpers";
-import { initialSync } from "../utils";
+import { initialSync, MetaStore } from "../utils";
 
 function extractSources(response: AskResponse): { [key: number]: ChunkType } {
   const sources: { [key: number]: ChunkType } = {};
@@ -150,6 +150,7 @@ export const search: Command = new CommanderCommand("search")
         const fileSystem = createFileSystem({
           ignorePatterns: ["*.lock", "*.bin", "*.ipynb", "*.pyc"],
         });
+        const metaStore = new MetaStore();
         const { spinner, onProgress } = createIndexingSpinner(root);
         const result = await initialSync(
           store,
@@ -158,6 +159,7 @@ export const search: Command = new CommanderCommand("search")
           root,
           options.dryRun,
           onProgress,
+          metaStore
         );
         while (true) {
           const info = await store.getInfo(options.store);

@@ -113,5 +113,10 @@ export interface Store {
    * Get store information
    */
   getInfo(storeId: string): Promise<StoreInfo>;
+
+  /**
+   * Create FTS index
+   */
+  createFTSIndex(storeId: string): Promise<void>;
 }
 

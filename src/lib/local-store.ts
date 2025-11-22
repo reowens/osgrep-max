@@ -28,33 +28,76 @@ interface VectorRecord {
     [key: string]: any;
 }
 
+import { TreeSitterChunker } from "./chunker";
+
 export class LocalStore implements Store {
     private db: lancedb.Connection | null = null;
-    private worker: Worker;
+    private worker!: Worker;
     private pendingRequests = new Map<
         string,
-        { resolve: (v: number[]) => void; reject: (e: any) => void }
+        { resolve: (v: number[] | number[][]) => void; reject: (e: any) => void }
     >();
+    private readonly MAX_WORKER_RSS = 1024 * 1024 * 1024; // 1GB
+    private chunker = new TreeSitterChunker();
 
     constructor() {
+        this.initializeWorker();
+        // Initialize chunker in background (it might download WASMs)
+        this.chunker.init().catch(err => console.error("Failed to init chunker:", err));
+    }
+
+    private initializeWorker() {
         this.worker = new Worker(path.join(__dirname, "worker.js"));
         this.worker.on("message", (message) => {
-            const { id, vector, error } = message;
+            const { id, vector, vectors, error, memory } = message;
             const pending = this.pendingRequests.get(id);
+
+            if (memory && memory.rss > this.MAX_WORKER_RSS) {
+                console.warn(`Worker memory usage high (${Math.round(memory.rss / 1024 / 1024)}MB). Restarting...`);
+                this.restartWorker();
+            }
+
             if (pending) {
-                if (error) pending.reject(new Error(error));
-                else pending.resolve(vector);
+                if (error) {
+                    pending.reject(new Error(error));
+                } else if (vectors) {
+                    pending.resolve(vectors);
+                } else {
+                    pending.resolve(vector);
+                }
                 this.pendingRequests.delete(id);
             }
         });
     }
 
-    private async getEmbedding(text: string): Promise<number[]> {
+    private async restartWorker() {
+        // Terminate old worker
+        await this.worker.terminate();
+
+        // Re-initialize
+        this.initializeWorker();
+
+        // Note: Any pending requests that were IN FLIGHT in the old worker will hang or need to be rejected.
+        // The 'terminate' call will not trigger the 'message' handler for them.
+        // We should reject all pending requests.
+        for (const [, { reject }] of this.pendingRequests) {
+            reject(new Error("Worker restarted due to memory limit"));
+        }
+        this.pendingRequests.clear();
+    }
+
+    private async getEmbeddings(texts: string[]): Promise<number[][]> {
         return new Promise((resolve, reject) => {
             const id = uuidv4();
-            this.pendingRequests.set(id, { resolve, reject });
-            this.worker.postMessage({ id, text });
+            this.pendingRequests.set(id, { resolve: resolve as any, reject });
+            this.worker.postMessage({ id, texts });
         });
+    }
+
+    private async getEmbedding(text: string): Promise<number[]> {
+        // Wrapper for single text to maintain compatibility where needed
+        const results = await this.getEmbeddings([text]);
+        return results[0];
     }
 
     private async getDb(): Promise<lancedb.Connection> {
@@ -124,9 +167,6 @@ export class LocalStore implements Store {
         }
 
         // Read file content
-        // Assuming 'file' is a stream or similar, but for now let's handle the case where it's passed from utils.ts
-        // In utils.ts we see: fs.createReadStream(filePath)
-        // We need to read the stream to string.
         let content = "";
         if (typeof file === "string") {
             content = file;
@@ -145,34 +185,43 @@ export class LocalStore implements Store {
         // Delete existing chunks for this file
         await table.delete(`path = '${options.metadata?.path}'`);
 
-        // Chunking (Simple paragraph split for now)
-        const paragraphs = content.split(/\n\s*\n/);
+        // Use TreeSitterChunker
+        const chunks = await this.chunker.chunk(options.metadata?.path || "unknown", content);
+        if (chunks.length === 0) return;
+
+        const texts = chunks.map(c => c.content);
+
+        // Batch embedding
+        const vectors = await this.getEmbeddings(texts);
+
         const data: VectorRecord[] = [];
-        let lineOffset = 0;
 
-        for (const p of paragraphs) {
-            if (!p.trim()) {
-                lineOffset += p.split("\n").length;
-                continue;
-            }
-
-            const vector = await this.getEmbedding(p);
-            const numLines = p.split("\n").length;
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const vector = vectors[i];
 
             data.push({
                 id: uuidv4(),
                 path: options.metadata?.path || "",
-                content: p,
-                start_line: lineOffset,
-                end_line: lineOffset + numLines,
+                content: chunk.content,
+                start_line: chunk.startLine,
+                end_line: chunk.endLine,
                 vector,
             });
-
-            lineOffset += numLines;
         }
 
         if (data.length > 0) {
             await table.add(data);
+        }
+    }
+
+    async createFTSIndex(storeId: string): Promise<void> {
+        const table = await this.getTable(storeId);
+        try {
+            // @ts-ignore - createIndex type definition might be missing in older versions or slightly different
+            await table.createIndex({ columns: ["content"], type: "fts" });
+        } catch (e) {
+            console.warn("Failed to create FTS index (might already exist):", e);
         }
     }
 
@@ -185,22 +234,66 @@ export class LocalStore implements Store {
     ): Promise<SearchResponse> {
         const table = await this.getTable(storeId);
         const queryVector = await this.getEmbedding(query);
+        const k = 60; // RRF constant
+        const limit = 50; // Fetch more candidates for fusion
 
-        const results = await table
+        // 1. Vector Search
+        const vectorResults = await table
             .search(queryVector)
-            .limit(top_k || 10)
+            .limit(limit)
             .toArray();
 
-        const chunks: ChunkType[] = results.map((r) => ({
-            type: "text",
-            text: r.content as string,
-            score: 1 - (r._distance as number), // Convert distance to similarity score
-            metadata: { path: r.path as string, hash: "" },
-            generated_metadata: {
-                start_line: r.start_line as number,
-                num_lines: (r.end_line as number) - (r.start_line as number),
-            },
-        }));
+        // 2. FTS Search
+        let ftsResults: any[] = [];
+        try {
+            ftsResults = await table
+                .search(query)
+                .limit(limit)
+                .toArray();
+        } catch (e) {
+            // FTS might fail if not indexed
+        }
+
+        // 3. RRF Fusion
+        const scores = new Map<string, number>();
+        const contentMap = new Map<string, any>();
+
+        // Process Vector Results
+        vectorResults.forEach((r, i) => {
+            const id = r.id as string; // Assuming id is unique
+            // If id is missing, use path+start_line
+            const key = id || `${r.path}:${r.start_line}`;
+            contentMap.set(key, r);
+            const score = 1 / (k + i + 1);
+            scores.set(key, (scores.get(key) || 0) + score);
+        });
+
+        // Process FTS Results
+        ftsResults.forEach((r, i) => {
+            const id = r.id as string;
+            const key = id || `${r.path}:${r.start_line}`;
+            if (!contentMap.has(key)) contentMap.set(key, r);
+            const score = 1 / (k + i + 1);
+            scores.set(key, (scores.get(key) || 0) + score);
+        });
+
+        // Sort by RRF score
+        const sortedKeys = Array.from(scores.keys()).sort((a, b) => (scores.get(b) || 0) - (scores.get(a) || 0));
+        const topKeys = sortedKeys.slice(0, top_k || 10);
+
+        const chunks: ChunkType[] = topKeys.map((key) => {
+            const r = contentMap.get(key);
+            return {
+                type: "text",
+                text: r.content as string,
+                score: scores.get(key) || 0,
+                metadata: { path: r.path as string, hash: "" },
+                generated_metadata: {
+                    start_line: r.start_line as number,
+                    num_lines: (r.end_line as number) - (r.start_line as number),
+                },
+            };
+        });
 
         return { data: chunks };
     }
