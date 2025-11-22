@@ -259,8 +259,6 @@ function formatSearchResults(
 
 export const search: Command = new CommanderCommand("search")
   .description("File pattern searcher")
-  .option("-i", "Makes the search case-insensitive", false)
-  .option("-r", "Recursive search", false)
   .option(
     "-m <max_count>, --max-count <max_count>",
     "The maximum number of results to return (total)",
@@ -308,7 +306,7 @@ export const search: Command = new CommanderCommand("search")
 
     let store: any = null;
     try {
-      await ensureSetup({ silent: options.json || true });
+      await ensureSetup({ silent: options.json });
       store = await createStore();
       
       // Auto-detect store ID if not explicitly provided

@@ -279,11 +279,21 @@ async function run() {
         ?.toLowerCase()
         .includes(c.expectedPath.toLowerCase()),
     );
-    const rr = rank >= 0 ? 1 / (rank + 1) : 0;
-    const recall = rank >= 0 && rank < 10 ? 1 : 0;
+    
+    // Check if avoidPath is present and ranks higher (lower index) than expected
+    const avoidRank = res.data.findIndex((chunk) =>
+      chunk.metadata?.path?.toLowerCase().includes(c.avoidPath?.toLowerCase() || "_____")
+    );
+    
+    // If avoidPath is found and ranks higher than expected, it's a failure
+    const hitAvoid = c.avoidPath && avoidRank >= 0 && (rank === -1 || avoidRank < rank);
+    const found = rank >= 0 && !hitAvoid;
+    
+    const rr = found ? 1 / (rank + 1) : 0;
+    const recall = found && rank < 10 ? 1 : 0;
     results.push({
       rr,
-      found: rank >= 0,
+      found,
       recall,
       path: c.expectedPath,
       query: c.query,
