@@ -6,7 +6,7 @@ import {
   createIndexingSpinner,
   formatDryRunSummary,
 } from "../lib/sync-helpers";
-import { initialSync, uploadFile } from "../utils";
+import { initialSync, uploadFile, MetaStore } from "../utils";
 
 export const watch = new Command("watch")
   .option(
@@ -24,6 +24,7 @@ export const watch = new Command("watch")
         ignorePatterns: ["*.lock", "*.bin", "*.ipynb", "*.pyc"],
       });
       const watchRoot = process.cwd();
+      const metaStore = new MetaStore();
 
       const { spinner, onProgress } = createIndexingSpinner(watchRoot);
       try {
@@ -43,6 +44,7 @@ export const watch = new Command("watch")
           watchRoot,
           options.dryRun,
           onProgress,
+          metaStore
         );
         spinner.succeed(
           `Initial sync complete (${result.processed}/${result.total}) • uploaded ${result.uploaded}`,
@@ -84,7 +86,7 @@ export const watch = new Command("watch")
           return;
         }
 
-        uploadFile(store, options.store, filePath, filename).catch((err) => {
+        uploadFile(store, options.store, filePath, filename, metaStore).catch((err) => {
           console.error("Failed to upload changed file:", filePath, err);
         });
       });
