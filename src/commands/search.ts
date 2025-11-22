@@ -3,7 +3,6 @@ import type { Command } from "commander";
 import { Command as CommanderCommand } from "commander";
 import { createFileSystem, createStore } from "../lib/context";
 import type {
-  AskResponse,
   ChunkType,
   FileMetadata,
   SearchResponse,
@@ -40,54 +39,6 @@ function detectLanguage(filePath: string): string {
     default:
       return "plaintext";
   }
-}
-
-function extractSources(response: AskResponse): { [key: number]: ChunkType } {
-  const sources: { [key: number]: ChunkType } = {};
-  const answer = response.answer;
-
-  // Match ALL cite tags and capture the i="..."
-  const citeTags = answer.match(/<cite i="(\d+(?:-\d+)?)"/g) ?? [];
-
-  for (const tag of citeTags) {
-    // Extract the index or index range inside the tag.
-    const index = tag.match(/i="(\d+(?:-\d+)?)"/)?.[1];
-    if (!index) continue;
-
-    // Case 1: Single index
-    if (!index.includes("-")) {
-      const idx = Number(index);
-      if (!Number.isNaN(idx) && idx < response.sources.length) {
-        sources[idx] = response.sources[idx];
-      }
-      continue;
-    }
-
-    // Case 2: Range "start-end"
-    const [start, end] = index.split("-").map(Number);
-
-    if (
-      !Number.isNaN(start) &&
-      !Number.isNaN(end) &&
-      start >= 0 &&
-      end >= start &&
-      end < response.sources.length
-    ) {
-      for (let i = start; i <= end; i++) {
-        sources[i] = response.sources[i];
-      }
-    }
-  }
-
-  return sources;
-}
-
-function formatAskResponse(response: AskResponse, show_content: boolean) {
-  const sources = extractSources(response);
-  const sourceEntries = Object.entries(sources).map(
-    ([index, chunk]) => `${index}: ${formatChunk(chunk, show_content)}`,
-  );
-  return `${response.answer}\n\n${sourceEntries.join("\n")}`;
 }
 
 function formatSearchResponse(response: SearchResponse, show_content: boolean) {
@@ -150,11 +101,6 @@ export const search: Command = new CommanderCommand("search")
   )
   .option("-c, --content", "Show content of the results", false)
   .option(
-    "-a, --answer",
-    "Generate an answer to the question based on the results",
-    false,
-  )
-  .option(
     "-s, --sync",
     "Syncs the local files to the store before searching",
     false,
@@ -173,7 +119,6 @@ export const search: Command = new CommanderCommand("search")
       store: string;
       m: string;
       c: boolean;
-      answer: boolean;
       sync: boolean;
       dryRun: boolean;
     } = cmd.optsWithGlobals();
@@ -223,79 +168,40 @@ export const search: Command = new CommanderCommand("search")
         ? exec_path
         : normalize(join(root, exec_path ?? ""));
 
-      let response: string;
-      if (!options.answer) {
-        const results = await store.search(
-          options.store,
-          pattern,
-          parseInt(options.m, 10),
-          { rerank: true },
-          {
-            all: [
-              {
-                key: "path",
-                operator: "starts_with",
-                value: search_path,
-              },
-            ],
-          },
-        );
-        
-        // Hint if store is empty
-        if (results.data.length === 0) {
-          try {
-            const info = await store.getInfo(options.store);
-            if (info.counts.pending === 0 && info.counts.in_progress === 0) {
-              console.log(
-                "No results found. If this is your first search, run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
-              );
-            }
-          } catch {
-            // Store doesn't exist yet
+      const results = await store.search(
+        options.store,
+        pattern,
+        parseInt(options.m, 10),
+        { rerank: true },
+        {
+          all: [
+            {
+              key: "path",
+              operator: "starts_with",
+              value: search_path,
+            },
+          ],
+        },
+      );
+      
+      // Hint if store is empty
+      if (results.data.length === 0) {
+        try {
+          const info = await store.getInfo(options.store);
+          if (info.counts.pending === 0 && info.counts.in_progress === 0) {
             console.log(
-              "No index found. Run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
+              "No results found. If this is your first search, run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
             );
           }
+        } catch {
+          // Store doesn't exist yet
+          console.log(
+            "No index found. Run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
+          );
         }
-        
-        response = formatSearchResponse(results, options.c);
-      } else {
-        const results = await store.ask(
-          options.store,
-          pattern,
-          parseInt(options.m, 10),
-          { rerank: true },
-          {
-            all: [
-              {
-                key: "path",
-                operator: "starts_with",
-                value: search_path,
-              },
-            ],
-          },
-        );
-        
-        // Hint if store is empty
-        if (results.sources.length === 0) {
-          try {
-            const info = await store.getInfo(options.store);
-            if (info.counts.pending === 0 && info.counts.in_progress === 0) {
-              console.log(
-                "No results found. If this is your first search, run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
-              );
-            }
-          } catch {
-            // Store doesn't exist yet
-            console.log(
-              "No index found. Run 'osgrep index' or 'osgrep --sync \"<query>\"' to index your repository first.\n",
-            );
-          }
-        }
-        
-        response = formatAskResponse(results, options.c);
       }
-
+      
+      const response = formatSearchResponse(results, options.c);
       console.log(response);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
