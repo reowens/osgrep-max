@@ -108,11 +108,59 @@ export class LocalStore implements Store {
   private async ensureTable(storeId: string): Promise<lancedb.Table> {
     const db = await this.getDb();
     try {
-      return await db.openTable(storeId);
-    } catch {
-      const table = await db.createTable(storeId, [this.baseSchemaRow()]);
-      await table.delete('id = "seed"');
-      return table;
+      const table = await db.openTable(storeId);
+      const schemaFields =
+        ((table as { schema?: { fields?: { name?: string }[] } }).schema
+          ?.fields || []).map((f) => f.name);
+      const missingFields = ["context_prev", "context_next"].filter(
+        (field) => !schemaFields.includes(field),
+      );
+
+      if (missingFields.length === 0) {
+        return table;
+      }
+
+      let existingRows: VectorRecord[] = [];
+      try {
+        existingRows = (await table.query().toArray()) as VectorRecord[];
+      } catch {
+        existingRows = [];
+      }
+
+      try {
+        await db.dropTable(storeId);
+      } catch {
+        // If drop fails, attempt recreate will throw below
+      }
+
+      const newTable = await db.createTable(storeId, [this.baseSchemaRow()]);
+      if (existingRows.length > 0) {
+        const migrated = existingRows.map((row) => ({
+          context_prev:
+            typeof row.context_prev === "string" ? row.context_prev : "",
+          context_next:
+            typeof row.context_next === "string" ? row.context_next : "",
+          ...row,
+        }));
+        await newTable.add(migrated);
+      }
+      await newTable.delete('id = "seed"');
+      return newTable;
+    } catch (err) {
+      try {
+        const table = await db.createTable(storeId, [this.baseSchemaRow()]);
+        await table.delete('id = "seed"');
+        return table;
+      } catch (createErr) {
+        // If the table already exists, open it instead of failing the flow
+        const message =
+          createErr instanceof Error ? createErr.message : String(createErr);
+        if (message.toLowerCase().includes("already exists")) {
+          const table = await db.openTable(storeId);
+          return table;
+        }
+        throw err;
+      }
     }
   }
 

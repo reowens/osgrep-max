@@ -84,7 +84,7 @@ osgrep "user validation" --compact
 
 Manually indexes the repository. Useful if you want to pre-warm the cache or if you've made massive changes outside of the editor.
 
-- Respects `.gitignore` and `.osgrepignore`.
+- Respects `.gitignore` and `.osgrepignore` (see [Configuration](#ignoring-files) section).
 - **Smart Indexing:** Only embeds code and config files. Skips binaries, lockfiles, and minified assets.
 - **Adaptive Throttling:** Monitors your RAM and CPU usage. If your system gets hot, indexing slows down automatically.
 
@@ -159,6 +159,16 @@ osgrep "helper functions"
 ```
 
 Stores are isolated automatically — no manual `--store` flags needed!
+
+### Ignoring Files
+
+osgrep respects both `.gitignore` and `.osgrepignore` files when indexing. Create a `.osgrepignore` file in your repository root to exclude additional files or patterns from indexing.
+
+**`.osgrepignore` syntax:**
+- Uses the same pattern syntax as `.gitignore`
+- Patterns are relative to the repository root
+- Supports glob patterns, negation (`!`), and directory patterns (`/`)
+
 
 ### Manual Store Management
 
