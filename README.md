@@ -34,7 +34,7 @@ Natural-language search that works like `grep`. Fast, local, and works with codi
     osgrep "where do we handle authentication?"
     ```
 
-    **Your first search will automatically index the repository.** Each repository is automatically isolated with its own index. Switching between repos "just works" — no manual configuration needed.
+    **Your first search will automatically index the repository.** Each repository is automatically isolated with its own index. Switching between repos "just works" — no manual configuration needed. If the background server is running (`osgrep serve`), search goes through the hot daemon; otherwise it falls back to on-demand indexing.
 
 ## Coding Agent Integration
 
@@ -42,13 +42,15 @@ Natural-language search that works like `grep`. Fast, local, and works with codi
 
 1. Run `osgrep install-claude-code`
 2. Open Claude Code (`claude`) and ask it questions about your codebase.
-3. It will use `osgrep` to find relevant context automatically.
+3. The plugin’s hooks auto-start `osgrep serve` in the background and shut it down on session end. Claude will use `osgrep --json` via Bash for semantic searches automatically.
 
 ## Commands
 
 ### `osgrep search`
 
 The default command. Searches the current directory using semantic meaning.
+
+The CLI prefers the hot server when available (via `.osgrep/server.json`), falling back to standalone search automatically.
 
 ```bash
 osgrep "how is the database connection pooled?"
@@ -63,6 +65,7 @@ osgrep "how is the database connection pooled?"
 | `--scores` | Show relevance scores (0.0-1.0). | `false` |
 | `--compact` | Show file paths only (like `grep -l`). | `false` |
 | `-s`, `--sync` | Force re-index changed files before searching. | `false` |
+| `--json` | Dense output for agents. | `false` |
 
 **Examples:**
 
@@ -89,6 +92,25 @@ Manually indexes the repository. Useful if you want to pre-warm the cache or if 
 osgrep index              # Index current dir
 osgrep index --dry-run    # See what would be indexed
 ```
+
+### `osgrep serve`
+
+Runs a lightweight HTTP server with live file watching so searches stay hot in RAM.
+
+- Keeps LanceDB and the embedding worker resident for <50ms responses.
+- Watches the repo (via chokidar) and incrementally re-indexes on change.
+- Health endpoint: `GET /health`
+- Search endpoint: `POST /search` with `{ query, limit, path, rerank }`
+- Writes lock: `.osgrep/server.json` with `port`/`pid`
+
+Usage:
+
+```bash
+osgrep serve             # defaults to port 4444
+OSGREP_PORT=5555 osgrep serve
+```
+
+Claude Code hooks start/stop this automatically; you rarely need to run it manually.
 
 ### `osgrep list`
 
@@ -166,5 +188,4 @@ pnpm format       # biome check
 
 Licensed under the Apache License, Version 2.0.  
 See [Apache-2.0](https://opensource.org/licenses/Apache-2.0) for details.
-
 
