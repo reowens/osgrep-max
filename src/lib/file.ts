@@ -113,8 +113,12 @@ export class NodeFileSystem implements FileSystem {
     }
 
     // Check custom ignore patterns
-    const relativePath = path.relative(root, filePath);
-    const normalizedPath = relativePath.replace(/\\/g, "/");
+    let relativePath = path.relative(root, filePath);
+    // Guard against absolute paths slipping through to the ignore lib
+    if (path.isAbsolute(relativePath)) {
+      relativePath = relativePath.replace(/^[/\\]+/, "");
+    }
+    let normalizedPath = relativePath.replace(/\\/g, "/") || ".";
 
     // Check if it's a directory
     let isDirectory = false;

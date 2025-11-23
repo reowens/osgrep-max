@@ -1,7 +1,6 @@
 {
-  "schema_version": "v1",
   "name": "osgrep",
-  "version": "0.1.0",
+  "version": "0.3.2",
   "description": "Semantic code search for Claude Code. Automatically indexes your project and provides intelligent search capabilities.",
   "author": {
     "name": "Ryan D'Onofrio",
