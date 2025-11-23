@@ -1,3 +1,6 @@
+// Reduce worker pool fan-out during eval to avoid ONNX concurrency issues
+process.env.OSGREP_WORKER_COUNT ??= "1";
+
 import { LocalStore } from "./lib/local-store";
 
 import type { SearchResponse } from "./lib/store";
