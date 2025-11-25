@@ -102,8 +102,7 @@ class EmbeddingWorker {
         "feature-extraction",
         this.embedModelId,
         {
-          dtype: "int8",
-          quantized: true,
+          dtype: "q4",
         },
       );
     }
@@ -164,7 +163,7 @@ class EmbeddingWorker {
       pooling: "cls",
       normalize: true,
       truncation: true,
-      max_length: 4096,
+      max_length: 512,
     });
 
     const colbertOut = await this.colbertPipe!(texts, {
@@ -228,7 +227,7 @@ class EmbeddingWorker {
       pooling: "cls",
       normalize: true,
       truncation: true,
-      max_length: 4096,
+      max_length: 512,
     });
     const denseVector = this.toDenseVectors(denseOut)[0] ?? [];
 

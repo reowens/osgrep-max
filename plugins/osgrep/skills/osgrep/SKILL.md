@@ -12,35 +12,66 @@ You have access to `osgrep`, a local neural search engine. It matches *concepts*
 ## Goal
 Act as a Senior Lead Engineer. Locate the "Source of Truth" (definitions) with minimal token usage.
 
-## Workflow
+## 1. Writing Effective Queries (CRITICAL)
+The quality of your query determines success.
 
-### 1. Targeted Search (Start Small)
+**Be Specific About Code Intent:**
+- ❌ "authentication flow"
+- ✅ "where is the SQL query that validates API key against database"
+- ✅ "function that checks KeyTable for valid API keys"
+
+**Include Implementation Details:**
+- ❌ "how does auth work"
+- ✅ "where does the code execute eq(KeyTable.key, apiKey) to verify tokens"
+
+**Target the Layer:**
+- "backend API endpoint that validates tokens" (not just "token validation")
+- "database query for session verification" (not just "sessions")
+
+## 2. Scope First, Search Second
+**Always scope if you can.** This cuts noise by 80%.
+
+Examples:
+- `osgrep -m 5 "session validation" packages/console`
+- `osgrep -m 5 "OAuth callback" packages/opencode/src/cli`
+
+If you don't know the path, use one broad search to find it, then scope your next search.
+
+## 3. Workflow
+
+### Step 1: Targeted Search
 Run `osgrep "Conceptual Query" [path]`.
-* **Limit:** Always start with `-m 5` (default is 10). Only increase if you find nothing.
-* **Scope:** If you know the general directory (e.g., `packages/server`), provide it as the second argument to filter noise immediately.
-    * *Example:* `osgrep -m 5 "How is session validation handled?" packages/server`
+* **Limit:** Start with `-m 5` for broad queries.
+* **Expand:** If the top result isn't what you need, try `-m 15` with a more specific query.
+* **Cap:** If you need more than 20 results, your query is too broad—rephrase it.
 
-### 2. Scan the Results
-You will receive a ranked list with snippets and tags.
-* **Check Tags:** Look for `[Definition]` tags. These are the high-value function/class bodies.
+### Step 2: Scan the Results
+You will receive a ranked list with snippets and context headers.
+* **Check Context:** Look for `Context: Function: ...` or `Context: Class: ...`. These are high-value definitions.
 * **Trust the Snippet:** The output is dense. Read the function signatures and comments in the snippet.
-* **Ignore Noise:** The tool automatically ranks `.md` docs and `.test` files lower. Do not try to force them to appear unless specifically requested.
+* **Ignore Noise:** The tool automatically ranks `.md` docs and `.test` files lower.
 
-### 3. Deep Dive (Progressive Disclosure)
+### Step 3: Deep Dive (Progressive Disclosure)
 Only use the `Read` tool if:
 - The snippet is truncated (`...`) AND looks like the correct answer.
 - You need to see imports to trace the data flow.
 
 *Efficiency Rule:* Do not read a file just to verify it exists. Trust the `osgrep` output path.
 
-### 4. Handling Partial Indexing
+### Step 4: Handling Partial Indexing
 If `osgrep` outputs: `⚠️ osgrep is currently indexing (X% complete)`, it means the database is not ready.
 * **Action:** Inform the user: "The codebase is still indexing (X%). Do you want me to proceed?" Wait for feeedback so the user can make an informed choice.
 * **Do not** assume missing files don't exist. They just aren't indexed yet.
 
-## When to use `osgrep` vs `grep`
-- **Use `osgrep` (Default):** "How", "Where", "What", "Explain", "Find feature logic".
-- **Use `grep`:** ONLY for literal refactoring (e.g., "Find every exact usage of `MAX_RETRIES`").
+## 4. What Good Results Look Like
 
-## Output Strategy
-Cite the **file path** and the **logic** found in the search results.
+✅ **You found it:**
+📂 packages/console/app/src/routes/zen/util/handler.ts
+   351 │ .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
+   355 │ if (!data) throw new AuthError("Invalid API key.")
+
+❌ **Too scattered (try narrower query):**
+📂 docs/authentication.md
+📂 packages/web/src/content/docs/auth.mdx
+📂 tests/auth.test.ts
+

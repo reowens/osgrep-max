@@ -16,7 +16,7 @@ Natural-language search that works like `grep`. Fast, local, and works with codi
 
 1. **Install**
    ```bash
-   npm install -g osgrep    # or pnpm / bun
+   npm install -g osgrep    
    ```
 
 2.  **Setup (Recommended)**
