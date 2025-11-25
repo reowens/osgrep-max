@@ -24,7 +24,7 @@ export async function downloadModels(): Promise<void> {
   try {
     // 1. Download Dense Model
     await pipeline("feature-extraction", MODEL_IDS.embed, {
-      dtype: "int8", 
+      dtype: "q4",
     });
 
     // 2. Download ColBERT Model

@@ -63,7 +63,7 @@ export class LocalStore implements Store {
       typeof input === "object" &&
       input !== null &&
       typeof (input as NodeJS.ReadableStream)[Symbol.asyncIterator] ===
-        "function"
+      "function"
     );
   }
 
@@ -263,7 +263,7 @@ export class LocalStore implements Store {
   ): Promise<PreparedChunk[]> {
     const fileIndexStart = PROFILE_ENABLED ? process.hrtime.bigint() : null;
     let fileChunkMs = 0;
-  
+
 
     // Read file content (prefer provided content to avoid double reads)
     let content = options.content ?? "";
@@ -298,7 +298,7 @@ export class LocalStore implements Store {
       options.metadata?.path || "unknown",
       content,
     );
-    
+
     if (PROFILE_ENABLED && chunkStart) {
       const chunkEnd = process.hrtime.bigint();
       // Calculate chunking time only
@@ -311,11 +311,11 @@ export class LocalStore implements Store {
       options.metadata?.path || "unknown",
       content,
     );
-    
+
     const baseChunks = anchorChunk
       ? [anchorChunk, ...parsedChunks]
       : parsedChunks;
-      
+
     if (baseChunks.length === 0) return [];
 
     const chunks: ChunkWithContext[] = baseChunks.map((chunk, idx) => {
@@ -335,7 +335,7 @@ export class LocalStore implements Store {
           chunkWithContext.isAnchor === true || (anchorChunk ? idx === 0 : false),
       };
     });
-    
+
     this.profile.totalChunkCount += anchorChunk ? 1 : 0;
 
     const chunkTexts = chunks.map((chunk) =>
@@ -371,8 +371,7 @@ export class LocalStore implements Store {
       const total = Number(end - fileIndexStart) / 1_000_000;
       // Note: We removed embedTime and deleteTime from this log since they don't happen here anymore
       console.log(
-        `[profile] index ${options.metadata?.path ?? "unknown"} • chunks=${
-          chunks.length
+        `[profile] index ${options.metadata?.path ?? "unknown"} • chunks=${chunks.length
         } chunkTime=${fileChunkMs.toFixed(1)}ms total=${total.toFixed(1)}ms`,
       );
     }
@@ -462,13 +461,13 @@ export class LocalStore implements Store {
 
   async createVectorIndex(storeId: string): Promise<void> {
     const table = await this.getTable(storeId);
-    
+
     // Guard against small tables - flat search is faster and avoids noisy k-means warnings
     const rowCount = await table.countRows();
     if (rowCount < 4000) {
       return;
     }
-    
+
     try {
       const numPartitions = Math.max(
         8,
@@ -533,11 +532,8 @@ export class LocalStore implements Store {
       typeof (record as { chunk_type?: unknown }).chunk_type === "string"
         ? ((record as { chunk_type?: string }).chunk_type as string)
         : "";
-    if (
-      chunkType === "function" ||
-      chunkType === "class" ||
-      chunkType === "method"
-    ) {
+    const boosted = ["function", "class", "method", "interface", "type_alias"];
+    if (boosted.includes(chunkType)) {
       adjusted *= 1.25;
     }
     const pathStr =
@@ -577,8 +573,6 @@ export class LocalStore implements Store {
     }
 
     const finalLimit = top_k ?? 10;
-    const vectorLimit = 400;
-    const ftsLimit = 400;
 
     // 1. Dense + ColBERT query encoding
     const queryEnc = await workerManager.encodeQuery(
@@ -601,22 +595,37 @@ export class LocalStore implements Store {
       ? `path LIKE '${pathPrefix.replace(/'/g, "''")}%'`
       : undefined;
 
-    // 2. Hybrid candidate generation (recall)
-    const vectorSearchQuery = table.search(queryVector).limit(vectorLimit);
-    const ftsSearchQuery = table.search(query).limit(ftsLimit);
+    // 2. HYBRID RECALL - THE "SQL SPLIT" STRATEGY
+    // We force the database to give us Code, even if it thinks Docs are better.
 
-    if (whereClause) {
-      vectorSearchQuery.where(whereClause);
-      ftsSearchQuery.where(whereClause);
-    }
+    // Definitions of what counts as a "Doc"
+    const docClause = "(path LIKE '%.md' OR path LIKE '%.mdx' OR path LIKE '%.txt' OR path LIKE '%.json')";
+    const codeClause = `NOT ${docClause}`;
 
-    const [denseCandidates, ftsCandidates] = await Promise.all([
-      vectorSearchQuery.toArray() as Promise<VectorRecord[]>,
-      ftsSearchQuery.toArray().catch(() => []) as Promise<VectorRecord[]>,
+    // A. Search Code (High Priority - Get 300)
+    const codeQuery = table.search(queryVector)
+      .where(whereClause ? `${whereClause} AND ${codeClause}` : codeClause)
+      .limit(300);
+
+    // B. Search Docs (Low Priority - Get 50)
+    const docQuery = table.search(queryVector)
+      .where(whereClause ? `${whereClause} AND ${docClause}` : docClause)
+      .limit(50);
+
+    // C. Run in Parallel
+    const [codeResults, docResults] = await Promise.all([
+      codeQuery.toArray() as Promise<VectorRecord[]>,
+      docQuery.toArray() as Promise<VectorRecord[]>,
     ]);
 
+    // D. Merge (Code First)
+    // We don't need FTS here because the semantic split is usually enough,
+    // but you can add FTS back if you want keyword guarantees.
+    const denseCandidates = [...codeResults, ...docResults];
+
+    // Deduplicate (just in case)
     const candidatesMap = new Map<string, VectorRecord>();
-    [...denseCandidates, ...ftsCandidates].forEach((r) => {
+    denseCandidates.forEach((r) => {
       const key = `${r.path}:${r.start_line}`;
       if (!candidatesMap.has(key)) candidatesMap.set(key, r);
     });
@@ -626,7 +635,7 @@ export class LocalStore implements Store {
       return { data: [] };
     }
 
-    // 3. Use encoded query for ColBERT MaxSim (opt-in)
+    // 3. Rerank (ColBERT + Structural Boosting)
     const queryMatrix = doRerank ? queryEnc.colbert : [];
 
     // 4. Offline MaxSim scoring (fallback to dense cosine if ColBERT payload is empty)
@@ -681,6 +690,7 @@ export class LocalStore implements Store {
       }
 
       score = this.applyStructureBoost(doc, score);
+
       return { record: doc, score };
     });
 
