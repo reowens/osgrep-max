@@ -6,9 +6,15 @@
     "name": "Ryan D'Onofrio",
     "email": "ryandonofrio@gmail.com"
   },
-  "hooks": "./hooks.json",
+  "hooks": "../hooks.json",
   "homepage": "https://github.com/ryandonofrio/osgrep",
   "repository": "https://github.com/ryandonofrio/osgrep",
   "license": "Apache-2.0",
-  "keywords": ["search", "semantic", "grep", "code-search", "semantic-search"]
+  "keywords": [
+    "search",
+    "semantic",
+    "grep",
+    "code-search",
+    "semantic-search"
+  ]
 }
