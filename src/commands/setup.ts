@@ -55,5 +55,5 @@ export const setup = new Command("setup")
     console.log(`   osgrep "search query"     # Search your code`);
     console.log(`   osgrep doctor             # Check health status`);
 
-    process.exit(0);
+    // process.exit(0);
   });
