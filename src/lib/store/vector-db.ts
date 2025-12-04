@@ -133,7 +133,7 @@ export class VectorDB {
         chunk_type: rec.chunk_type ?? "",
         vector: vec,
         colbert: (() => {
-          const c = rec.colbert as any;
+          const c = rec.colbert;
           if (Buffer.isBuffer(c)) return c;
           if (ArrayBuffer.isView(c) && c.buffer) {
             return Buffer.from(c.buffer, c.byteOffset ?? 0, c.byteLength ?? 0);
@@ -141,7 +141,8 @@ export class VectorDB {
           if (Array.isArray(c)) return Buffer.from(c);
           return Buffer.alloc(0);
         })(),
-        colbert_scale: typeof rec.colbert_scale === "number" ? rec.colbert_scale : 1,
+        colbert_scale:
+          typeof rec.colbert_scale === "number" ? rec.colbert_scale : 1,
         pooled_colbert_48d: rec.pooled_colbert_48d
           ? Array.from(rec.pooled_colbert_48d)
           : undefined,
@@ -153,11 +154,8 @@ export class VectorDB {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.toLowerCase().includes("found field not in schema")) {
-        const schemaFields =
-          Array.isArray((table as any)?.schema?.fields) &&
-            (table as any).schema.fields.length > 0
-            ? (table as any).schema.fields.map((f: any) => f?.name)
-            : [];
+        const schema = await table.schema();
+        const schemaFields = schema.fields.map((f) => f.name);
         throw new Error(
           `[vector-db] schema mismatch detected (fields: ${schemaFields.join(
             ", ",
@@ -231,9 +229,8 @@ export class VectorDB {
     this.closed = true;
     this.unregisterCleanup?.();
     this.unregisterCleanup = undefined;
-    const hasClose = typeof (this.db as any)?.close === "function";
-    if (this.db && hasClose) {
-      await (this.db as any).close();
+    if (this.db) {
+      await this.db.close();
     }
     this.db = null;
   }

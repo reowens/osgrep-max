@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { TreeSitterChunker } from "../src/lib/index/chunker";
-import { buildAnchorChunk, formatChunkText } from "../src/lib/index/chunker";
+import {
+  buildAnchorChunk,
+  formatChunkText,
+  TreeSitterChunker,
+} from "../src/lib/index/chunker";
 
 describe("TreeSitterChunker fallback and splitting", () => {
   it("splits large text into overlapping chunks with preserved ordering", async () => {
-    const chunker = new TreeSitterChunker();
+    const chunker = new TreeSitterChunker() as TreeSitterChunker & {
+      initialized: boolean;
+      parser: unknown;
+    };
     // Skip init and force fallback path
-    (chunker as any).initialized = true;
-    (chunker as any).parser = null;
+    chunker.initialized = true;
+    chunker.parser = null;
 
     const lines = Array.from({ length: 220 }, (_, i) => `line-${i + 1}`);
     const content = lines.join("\n");
@@ -25,9 +31,12 @@ describe("TreeSitterChunker fallback and splitting", () => {
   });
 
   it("splits very long single-line content by characters", async () => {
-    const chunker = new TreeSitterChunker();
-    (chunker as any).initialized = true;
-    (chunker as any).parser = null;
+    const chunker = new TreeSitterChunker() as TreeSitterChunker & {
+      initialized: boolean;
+      parser: unknown;
+    };
+    chunker.initialized = true;
+    chunker.parser = null;
 
     const content = "a".repeat(3500);
     const { chunks } = await chunker.chunk("file.txt", content);
@@ -45,9 +54,9 @@ export const value = 1;
 function example() {}`;
 
     const anchor = buildAnchorChunk("src/example.ts", content, {
-      imports: ['fs'],
-      exports: ['value'],
-      comments: ['// top comment']
+      imports: ["fs"],
+      exports: ["value"],
+      comments: ["// top comment"],
     });
 
     expect(anchor.isAnchor).toBe(true);
@@ -58,7 +67,16 @@ function example() {}`;
   });
 
   it("formatChunkText adds file breadcrumb when missing", () => {
-    const formatted = formatChunkText({ content: "code", context: [] } as any, "/repo/path/file.ts");
+    const formatted = formatChunkText(
+      {
+        content: "code",
+        context: [],
+        startLine: 0,
+        endLine: 0,
+        type: "other",
+      },
+      "/repo/path/file.ts",
+    );
     expect(formatted.startsWith("File: /repo/path/file.ts")).toBe(true);
     expect(formatted).toContain("---");
   });

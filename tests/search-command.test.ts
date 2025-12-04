@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { Command } from "commander";
+import type { Command } from "commander";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const spinner = {
   text: "",
@@ -8,7 +8,7 @@ const spinner = {
 };
 
 vi.mock("../src/lib/setup/setup-helpers", () => ({
-  ensureSetup: vi.fn(async () => { }),
+  ensureSetup: vi.fn(async () => {}),
 }));
 
 vi.mock("../src/lib/utils/project-root", () => ({
@@ -62,8 +62,8 @@ vi.mock("../src/lib/store/vector-db", () => ({
   VectorDB: vi.fn(() => ({
     listPaths: vi.fn(async () => new Map()),
     hasAnyRows: vi.fn(async () => false),
-    createFTSIndex: vi.fn(async () => { }),
-    close: vi.fn(async () => { }),
+    createFTSIndex: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
   })),
 }));
 
@@ -84,7 +84,7 @@ describe("search command", () => {
   });
 
   it("auto-syncs when store is empty and performs search", async () => {
-    const tmpDir = originalCwd;
+    const _tmpDir = originalCwd;
     await (search as Command).parseAsync(["query"], { from: "user" });
 
     expect(initialSync).toHaveBeenCalled();

@@ -1,12 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Command } from "commander";
-import { ensureSetup } from "../lib/setup/setup-helpers";
 import { MODEL_IDS, PATHS } from "../config";
-import { gracefulExit } from "../lib/utils/exit";
-
-
 import { ensureGrammars } from "../lib/index/grammar-loader";
+import { ensureSetup } from "../lib/setup/setup-helpers";
+import { gracefulExit } from "../lib/utils/exit";
 
 export const setup = new Command("setup")
   .description("One-time setup: download models and prepare osgrep")

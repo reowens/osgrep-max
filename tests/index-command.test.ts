@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/lib/setup/setup-helpers", () => ({
-  ensureSetup: vi.fn(async () => { }),
+  ensureSetup: vi.fn(async () => {}),
 }));
 
 vi.mock("../src/lib/utils/project-root", () => ({
@@ -29,7 +29,7 @@ vi.mock("../src/lib/index/sync-helpers", () => ({
 }));
 
 vi.mock("../src/lib/index/grammar-loader", () => ({
-  ensureGrammars: vi.fn(async () => { }),
+  ensureGrammars: vi.fn(async () => {}),
 }));
 
 vi.mock("../src/lib/index/syncer", () => ({
@@ -42,8 +42,8 @@ vi.mock("../src/lib/index/syncer", () => ({
 }));
 
 const fakeVectorDb = {
-  drop: vi.fn(async () => { }),
-  createFTSIndex: vi.fn(async () => { }),
+  drop: vi.fn(async () => {}),
+  createFTSIndex: vi.fn(async () => {}),
 };
 
 vi.mock("../src/lib/store/vector-db", () => ({
@@ -51,8 +51,8 @@ vi.mock("../src/lib/store/vector-db", () => ({
 }));
 
 import { index } from "../src/commands/index";
-import { initialSync } from "../src/lib/index/syncer";
 import { createIndexingSpinner } from "../src/lib/index/sync-helpers";
+import { initialSync } from "../src/lib/index/syncer";
 import { ensureSetup } from "../src/lib/setup/setup-helpers";
 
 describe("index command", () => {
@@ -65,8 +65,11 @@ describe("index command", () => {
 
     expect(ensureSetup).toHaveBeenCalledOnce();
     expect(initialSync).toHaveBeenCalledOnce();
-    const spinner = (createIndexingSpinner as any).mock.results[0]
-      .value.spinner;
+    const spinner = vi.mocked(createIndexingSpinner).mock.results[0]?.value
+      .spinner;
+    if (!spinner) {
+      throw new Error("createIndexingSpinner mock missing spinner");
+    }
     expect(spinner.succeed).toHaveBeenCalled();
   });
 });

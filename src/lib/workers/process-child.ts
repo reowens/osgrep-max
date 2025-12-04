@@ -1,14 +1,25 @@
 import process from "node:process";
-import type { VectorRecord } from "../store/types";
-import processFile, { encodeQuery, rerank } from "./worker";
+import processFile, {
+  encodeQuery,
+  type ProcessFileInput,
+  type ProcessFileResult,
+  type RerankDoc,
+  rerank,
+} from "./worker";
 
 type IncomingMessage =
-  | { id: number; method: "processFile"; payload: any }
-  | { id: number; method: "encodeQuery"; payload: any }
-  | { id: number; method: "rerank"; payload: any };
+  | { id: number; method: "processFile"; payload: ProcessFileInput }
+  | { id: number; method: "encodeQuery"; payload: { text: string } }
+  | {
+      id: number;
+      method: "rerank";
+      payload: { query: number[][]; docs: RerankDoc[]; colbertDim: number };
+    };
 
 type OutgoingMessage =
-  | { id: number; result: VectorRecord[] | any }
+  | { id: number; result: ProcessFileResult }
+  | { id: number; result: Awaited<ReturnType<typeof encodeQuery>> }
+  | { id: number; result: Awaited<ReturnType<typeof rerank>> }
   | { id: number; error: string };
 
 const send = (msg: OutgoingMessage) => {

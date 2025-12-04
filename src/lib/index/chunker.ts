@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { GRAMMARS_DIR } from "./grammar-loader";
-import { getLanguageByExtension } from "../core/languages";
 import { CONFIG } from "../../config";
+import { getLanguageByExtension } from "../core/languages";
+import { GRAMMARS_DIR } from "./grammar-loader";
 
 // web-tree-sitter ships a CommonJS build
 const TreeSitter = require("web-tree-sitter");
@@ -14,13 +14,13 @@ export interface Chunk {
   startLine: number;
   endLine: number;
   type:
-  | "function"
-  | "method"
-  | "class"
-  | "interface"
-  | "type_alias"
-  | "block"
-  | "other";
+    | "function"
+    | "method"
+    | "class"
+    | "interface"
+    | "type_alias"
+    | "block"
+    | "other";
   context?: string[];
 }
 
@@ -82,7 +82,7 @@ export function formatChunkText(
 export function buildAnchorChunk(
   filePath: string,
   content: string,
-  metadata: FileMetadata
+  metadata: FileMetadata,
 ): Chunk & { context: string[]; chunkIndex: number; isAnchor: boolean } {
   const lines = content.split("\n");
 
@@ -194,7 +194,10 @@ export class TreeSitterChunker {
   async chunk(filePath: string, content: string): Promise<ChunkingResult> {
     if (!this.initialized) await this.init();
 
-    let result: ChunkingResult = { chunks: [], metadata: { imports: [], exports: [], comments: [] } };
+    let result: ChunkingResult = {
+      chunks: [],
+      metadata: { imports: [], exports: [], comments: [] },
+    };
 
     if (this.parser) {
       try {
@@ -220,10 +223,18 @@ export class TreeSitterChunker {
     const ext = path.extname(filePath);
     const langDef = getLanguageByExtension(ext);
     const lang = langDef?.grammar?.name || "";
-    if (!lang) return { chunks: [], metadata: { imports: [], exports: [], comments: [] } };
+    if (!lang)
+      return {
+        chunks: [],
+        metadata: { imports: [], exports: [], comments: [] },
+      };
 
     const language = await this.getLanguage(lang);
-    if (!language || !this.parser) return { chunks: [], metadata: { imports: [], exports: [], comments: [] } };
+    if (!language || !this.parser)
+      return {
+        chunks: [],
+        metadata: { imports: [], exports: [], comments: [] },
+      };
 
     this.parser.setLanguage(language);
     const tree = this.parser.parse(content);
@@ -357,13 +368,20 @@ export class TreeSitterChunker {
 
     const visit = (node: TreeSitterNode, stack: string[]) => {
       // Metadata extraction
-      if (node.type === "import_statement" || node.type === "import_declaration") {
+      if (
+        node.type === "import_statement" ||
+        node.type === "import_declaration"
+      ) {
         metadata.imports.push(node.text.trim());
-      } else if (node.type === "export_statement" || node.type === "export_declaration") {
+      } else if (
+        node.type === "export_statement" ||
+        node.type === "export_declaration"
+      ) {
         // Simple export extraction
-        metadata.exports.push(node.text.trim().split('\n')[0]);
+        metadata.exports.push(node.text.trim().split("\n")[0]);
       } else if (node.type.includes("comment")) {
-        if (node.startPosition.row < 10) { // Only top comments
+        if (node.startPosition.row < 10) {
+          // Only top comments
           metadata.comments.push(node.text.trim());
         }
       }

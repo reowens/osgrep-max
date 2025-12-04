@@ -2,21 +2,46 @@ import * as childProcess from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { CONFIG, WORKER_TIMEOUT_MS } from "../../config";
+import type { ProcessFileInput, ProcessFileResult, RerankDoc } from "./worker";
 
 type TaskMethod = "processFile" | "encodeQuery" | "rerank";
 
-type PendingTask = {
+type EncodeQueryResult = Awaited<
+  ReturnType<typeof import("./worker")["encodeQuery"]>
+>;
+type RerankResult = Awaited<ReturnType<typeof import("./worker")["rerank"]>>;
+
+type TaskPayloads = {
+  processFile: ProcessFileInput;
+  encodeQuery: { text: string };
+  rerank: { query: number[][]; docs: RerankDoc[]; colbertDim: number };
+};
+
+type TaskResults = {
+  processFile: ProcessFileResult;
+  encodeQuery: EncodeQueryResult;
+  rerank: RerankResult;
+};
+
+type WorkerMessage =
+  | { id: number; result: TaskResults[TaskMethod] }
+  | { id: number; error: string };
+
+type PendingTask<M extends TaskMethod = TaskMethod> = {
   id: number;
-  method: TaskMethod;
-  payload: any;
-  resolve: (value: any) => void;
+  method: M;
+  payload: TaskPayloads[M];
+  resolve: (value: TaskResults[M]) => void;
   reject: (reason?: unknown) => void;
   worker?: ProcessWorker;
   timeout?: NodeJS.Timeout;
 };
 
 const TASK_TIMEOUT_MS = (() => {
-  const fromEnv = Number.parseInt(process.env.OSGREP_WORKER_TASK_TIMEOUT_MS ?? "", 10);
+  const fromEnv = Number.parseInt(
+    process.env.OSGREP_WORKER_TASK_TIMEOUT_MS ?? "",
+    10,
+  );
   if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
   return 30_000;
 })();
@@ -28,7 +53,10 @@ class ProcessWorker {
   busy = false;
   pendingTaskId: number | null = null;
 
-  constructor(public modulePath: string, public execArgv: string[]) {
+  constructor(
+    public modulePath: string,
+    public execArgv: string[],
+  ) {
     this.child = childProcess.fork(modulePath, {
       execArgv,
       env: { ...process.env },
@@ -54,7 +82,7 @@ function resolveProcessWorker(): { filename: string; execArgv: string[] } {
 export class WorkerPool {
   private workers: ProcessWorker[] = [];
   private taskQueue: number[] = [];
-  private tasks = new Map<number, PendingTask>();
+  private tasks = new Map<number, PendingTask<TaskMethod>>();
   private nextId = 1;
   private destroyed = false;
   private destroyPromise: Promise<void> | null = null;
@@ -72,7 +100,7 @@ export class WorkerPool {
     }
   }
 
-  private clearTaskTimeout(task: PendingTask) {
+  private clearTaskTimeout<M extends TaskMethod>(task: PendingTask<M>) {
     if (task.timeout) {
       clearTimeout(task.timeout);
       task.timeout = undefined;
@@ -84,7 +112,10 @@ export class WorkerPool {
     if (idx !== -1) this.taskQueue.splice(idx, 1);
   }
 
-  private completeTask(task: PendingTask, worker: ProcessWorker | null) {
+  private completeTask<M extends TaskMethod>(
+    task: PendingTask<M>,
+    worker: ProcessWorker | null,
+  ) {
     this.clearTaskTimeout(task);
     this.tasks.delete(task.id);
     this.removeFromQueue(task.id);
@@ -95,14 +126,21 @@ export class WorkerPool {
     }
   }
 
-  private handleWorkerExit(worker: ProcessWorker, code: number | null, signal: NodeJS.Signals | null) {
+  private handleWorkerExit(
+    worker: ProcessWorker,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ) {
     worker.busy = false;
-    const failedTasks = Array.from(this.tasks.values()).filter((t) => t.worker === worker);
+    const failedTasks = Array.from(this.tasks.values()).filter(
+      (t) => t.worker === worker,
+    );
     for (const task of failedTasks) {
       this.clearTaskTimeout(task);
       task.reject(
         new Error(
-          `Worker exited unexpectedly${code ? ` (code ${code})` : ""}${signal ? ` signal ${signal}` : ""
+          `Worker exited unexpectedly${code ? ` (code ${code})` : ""}${
+            signal ? ` signal ${signal}` : ""
           }`,
         ),
       );
@@ -119,14 +157,14 @@ export class WorkerPool {
   private spawnWorker() {
     const worker = new ProcessWorker(this.modulePath, this.execArgv);
 
-    const onMessage = (msg: { id: number; result?: any; error?: string }) => {
+    const onMessage = (msg: WorkerMessage) => {
       const task = this.tasks.get(msg.id);
       if (!task) return;
 
-      if (msg.error) {
+      if ("error" in msg) {
         task.reject(new Error(msg.error));
       } else {
-        task.resolve(msg.result);
+        task.resolve(msg.result as TaskResults[TaskMethod]);
       }
 
       this.completeTask(task, worker);
@@ -141,33 +179,43 @@ export class WorkerPool {
     this.workers.push(worker);
   }
 
-  private enqueue(method: TaskMethod, payload: any): Promise<any> {
+  private enqueue<M extends TaskMethod>(
+    method: M,
+    payload: TaskPayloads[M],
+  ): Promise<TaskResults[M]> {
     if (this.destroyed) {
       return Promise.reject(new Error("Worker pool destroyed"));
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      const task: PendingTask = { id, method, payload, resolve, reject };
-      this.tasks.set(id, task);
+      const task: PendingTask<M> = { id, method, payload, resolve, reject };
+      this.tasks.set(id, task as unknown as PendingTask<TaskMethod>);
       this.taskQueue.push(id);
       this.dispatch();
     });
   }
 
-  private handleTaskTimeout(task: PendingTask, worker: ProcessWorker) {
+  private handleTaskTimeout<M extends TaskMethod>(
+    task: PendingTask<M>,
+    worker: ProcessWorker,
+  ) {
     if (this.destroyed || !this.tasks.has(task.id)) return;
 
     this.clearTaskTimeout(task);
     console.warn(
       `[worker-pool] ${task.method} timed out after ${TASK_TIMEOUT_MS}ms; restarting worker.`,
     );
-    task.reject(new Error(`Worker task ${task.method} timed out after ${TASK_TIMEOUT_MS}ms`));
+    task.reject(
+      new Error(
+        `Worker task ${task.method} timed out after ${TASK_TIMEOUT_MS}ms`,
+      ),
+    );
 
     worker.child.removeAllListeners("message");
     worker.child.removeAllListeners("exit");
     try {
       worker.child.kill("SIGKILL");
-    } catch { }
+    } catch {}
 
     this.workers = this.workers.filter((w) => w !== worker);
     if (!this.destroyed) {
@@ -198,10 +246,17 @@ export class WorkerPool {
     idle.pendingTaskId = task.id;
     task.worker = idle;
 
-    task.timeout = setTimeout(() => this.handleTaskTimeout(task, idle), TASK_TIMEOUT_MS);
+    task.timeout = setTimeout(
+      () => this.handleTaskTimeout(task, idle),
+      TASK_TIMEOUT_MS,
+    );
 
     try {
-      idle.child.send({ id: task.id, method: task.method, payload: task.payload });
+      idle.child.send({
+        id: task.id,
+        method: task.method,
+        payload: task.payload,
+      });
     } catch (err) {
       this.clearTaskTimeout(task);
       this.completeTask(task, idle);
@@ -212,7 +267,7 @@ export class WorkerPool {
     this.dispatch();
   }
 
-  processFile(input: { path: string; absolutePath?: string }) {
+  processFile(input: ProcessFileInput) {
     return this.enqueue("processFile", input);
   }
 
@@ -220,11 +275,7 @@ export class WorkerPool {
     return this.enqueue("encodeQuery", { text });
   }
 
-  rerank(input: {
-    query: number[][];
-    docs: Array<{ colbert: Buffer | Int8Array | number[]; scale: number }>;
-    colbertDim: number;
-  }) {
+  rerank(input: TaskPayloads["rerank"]) {
     return this.enqueue("rerank", input);
   }
 
@@ -251,7 +302,7 @@ export class WorkerPool {
           const force = setTimeout(() => {
             try {
               w.child.kill("SIGKILL");
-            } catch { }
+            } catch {}
           }, FORCE_KILL_GRACE_MS);
           setTimeout(() => {
             clearTimeout(force);

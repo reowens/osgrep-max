@@ -1,38 +1,42 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {
+  AutoTokenizer,
+  env,
+  type PreTrainedTokenizer,
+} from "@huggingface/transformers";
 import * as ort from "onnxruntime-node";
-import { AutoTokenizer, env, type PreTrainedTokenizer } from "@huggingface/transformers";
 import { v4 as uuidv4 } from "uuid";
 import { CONFIG, MODEL_IDS, PATHS } from "../../config";
 import {
-  TreeSitterChunker,
   buildAnchorChunk,
-  formatChunkText,
   type ChunkWithContext,
+  formatChunkText,
+  TreeSitterChunker,
 } from "../index/chunker";
+import type { PreparedChunk, VectorRecord } from "../store/types";
 import {
   computeBufferHash,
   hasNullByte,
   isIndexableFile,
   readFileSnapshot,
 } from "../utils/file-utils";
-import { ColBERTTokenizer } from "./colbert-tokenizer";
 import { maxSim } from "./colbert-math";
-import type { PreparedChunk, VectorRecord } from "../store/types";
+import { ColBERTTokenizer } from "./colbert-tokenizer";
 
-type HybridResult = {
+export type HybridResult = {
   dense: Float32Array;
   colbert: Int8Array;
   scale: number;
   pooled_colbert_48d?: Float32Array;
 };
 
-type ProcessFileInput = {
+export type ProcessFileInput = {
   path: string;
   absolutePath?: string;
 };
 
-type ProcessFileResult = {
+export type ProcessFileResult = {
   vectors: VectorRecord[];
   hash: string;
   mtimeMs: number;
@@ -40,7 +44,7 @@ type ProcessFileResult = {
   shouldDelete?: boolean;
 };
 
-type RerankDoc = {
+export type RerankDoc = {
   colbert: Buffer | Int8Array | number[];
   scale: number;
 };
@@ -109,7 +113,10 @@ class WorkerRuntime {
       interOpNumThreads: 1,
       graphOptimizationLevel: "all",
     };
-    this.embedSession = await ort.InferenceSession.create(modelPath, sessionOptions);
+    this.embedSession = await ort.InferenceSession.create(
+      modelPath,
+      sessionOptions,
+    );
   }
 
   private async loadColbert() {
@@ -143,7 +150,10 @@ class WorkerRuntime {
       graphOptimizationLevel: "all",
     };
 
-    this.colbertSession = await ort.InferenceSession.create(resolved, sessionOptions);
+    this.colbertSession = await ort.InferenceSession.create(
+      resolved,
+      sessionOptions,
+    );
   }
 
   private async ensureReady() {
@@ -158,7 +168,11 @@ class WorkerRuntime {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = (async () => {
-      await Promise.all([this.chunker.init(), this.loadGranite(), this.loadColbert()]);
+      await Promise.all([
+        this.chunker.init(),
+        this.loadGranite(),
+        this.loadColbert(),
+      ]);
     })().finally(() => {
       this.initPromise = null;
     });
@@ -228,36 +242,40 @@ class WorkerRuntime {
       max_length: 256,
     });
 
-    const inputIds = encoded.input_ids.data as BigInt64Array;
-    const attentionMask = encoded.attention_mask.data as BigInt64Array;
+    type EncodedTensor = { data: BigInt64Array; dims?: number[] };
+    const inputTensor = encoded.input_ids as unknown as EncodedTensor;
+    const attentionTensor = encoded.attention_mask as unknown as EncodedTensor;
+    const inputIds = inputTensor.data;
+    const attentionMask = attentionTensor.data;
     const seqLen =
-      encoded.input_ids.dims?.[1] ??
+      inputTensor.dims?.[1] ??
       Math.max(1, Math.floor(inputIds.length / texts.length));
 
-    const tokenTypeIdsRaw =
-      (encoded as any).token_type_ids?.data as BigInt64Array | undefined;
+    const tokenTypeIdsRaw = (
+      encoded as Partial<{ token_type_ids: EncodedTensor }>
+    ).token_type_ids;
     const tokenTypeIds =
-      tokenTypeIdsRaw && tokenTypeIdsRaw.length === inputIds.length
-        ? tokenTypeIdsRaw
+      tokenTypeIdsRaw &&
+      tokenTypeIdsRaw.data.length === inputIds.length &&
+      tokenTypeIdsRaw.data.length === attentionMask.length
+        ? tokenTypeIdsRaw.data
         : new BigInt64Array(inputIds.length).fill(BigInt(0));
 
     const feeds = {
       input_ids: new ort.Tensor("int64", inputIds, [texts.length, seqLen]),
-      attention_mask: new ort.Tensor(
-        "int64",
-        attentionMask,
-        [texts.length, seqLen],
-      ),
-      token_type_ids: new ort.Tensor(
-        "int64",
-        tokenTypeIds,
-        [texts.length, seqLen],
-      ),
+      attention_mask: new ort.Tensor("int64", attentionMask, [
+        texts.length,
+        seqLen,
+      ]),
+      token_type_ids: new ort.Tensor("int64", tokenTypeIds, [
+        texts.length,
+        seqLen,
+      ]),
     };
 
     const sessionOut = await this.embedSession.run(feeds);
     const hidden =
-      sessionOut["last_hidden_state"] ??
+      sessionOut.last_hidden_state ??
       sessionOut[this.embedSession.outputNames[0]];
 
     if (!hidden) {
@@ -282,9 +300,11 @@ class WorkerRuntime {
   ): Promise<HybridResult[]> {
     await this.ensureReady();
     if (!this.colbertSession || !this.colbertTokenizer) return [];
+    const tokenizer = this.colbertTokenizer;
+    const session = this.colbertSession;
 
     const encodedBatch = await Promise.all(
-      texts.map((t) => this.colbertTokenizer!.encodeDoc(t)),
+      texts.map((t) => tokenizer.encodeDoc(t)),
     );
 
     const maxLen = Math.max(...encodedBatch.map((e) => e.input_ids.length));
@@ -307,18 +327,19 @@ class WorkerRuntime {
     }
 
     const feeds = {
-      input_ids: new ort.Tensor("int64", batchInputIds, [
-        texts.length,
-        maxLen,
-      ]),
+      input_ids: new ort.Tensor("int64", batchInputIds, [texts.length, maxLen]),
       attention_mask: new ort.Tensor("int64", batchAttentionMask, [
         texts.length,
         maxLen,
       ]),
     };
 
-    const sessionOut = await this.colbertSession.run(feeds);
-    const output = sessionOut[this.colbertSession.outputNames[0]];
+    const sessionOut = await session.run(feeds);
+    const outputName = session.outputNames[0];
+    const output = sessionOut[outputName];
+    if (!output) {
+      throw new Error("ColBERT session output missing embeddings tensor");
+    }
 
     const data = output.data as Float32Array;
     const [batch, seq, dim] = output.dims as number[];
@@ -377,8 +398,7 @@ class WorkerRuntime {
 
       results.push({
         dense:
-          denseVectors[b] ??
-          new Float32Array(this.vectorDimensions).fill(0),
+          denseVectors[b] ?? new Float32Array(this.vectorDimensions).fill(0),
         colbert: int8Array,
         scale: maxVal,
         pooled_colbert_48d: pooled,
@@ -393,7 +413,10 @@ class WorkerRuntime {
     await this.ensureReady();
 
     const results: HybridResult[] = [];
-    const envBatch = Number.parseInt(process.env.OSGREP_WORKER_BATCH_SIZE ?? "", 10);
+    const envBatch = Number.parseInt(
+      process.env.OSGREP_WORKER_BATCH_SIZE ?? "",
+      10,
+    );
     const BATCH_SIZE =
       Number.isFinite(envBatch) && envBatch > 0
         ? Math.max(4, Math.min(16, envBatch))
@@ -408,7 +431,10 @@ class WorkerRuntime {
     return results;
   }
 
-  private async chunkFile(pathname: string, content: string): Promise<ChunkWithContext[]> {
+  private async chunkFile(
+    pathname: string,
+    content: string,
+  ): Promise<ChunkWithContext[]> {
     await this.ensureReady();
     const { chunks: parsedChunks, metadata } = await this.chunker.chunk(
       pathname,
@@ -523,23 +549,29 @@ class WorkerRuntime {
     await this.ensureReady();
 
     const [denseVector] = await this.runGraniteBatch([text]);
-    const encoded = await this.colbertTokenizer!.encodeQuery(text);
+    if (!this.colbertTokenizer || !this.colbertSession) {
+      throw new Error("ColBERT runtime not initialized");
+    }
+
+    const encoded = await this.colbertTokenizer.encodeQuery(text);
 
     const feeds = {
-      input_ids: new ort.Tensor(
-        "int64",
-        encoded.input_ids,
-        [1, encoded.input_ids.length],
-      ),
-      attention_mask: new ort.Tensor(
-        "int64",
-        encoded.attention_mask,
-        [1, encoded.attention_mask.length],
-      ),
+      input_ids: new ort.Tensor("int64", encoded.input_ids, [
+        1,
+        encoded.input_ids.length,
+      ]),
+      attention_mask: new ort.Tensor("int64", encoded.attention_mask, [
+        1,
+        encoded.attention_mask.length,
+      ]),
     };
 
-    const sessionOut = await this.colbertSession!.run(feeds);
-    const output = sessionOut[this.colbertSession!.outputNames[0]];
+    const sessionOut = await this.colbertSession.run(feeds);
+    const outputName = this.colbertSession.outputNames[0];
+    const output = sessionOut[outputName];
+    if (!output) {
+      throw new Error("ColBERT session output missing embeddings tensor");
+    }
 
     const data = output.data as Float32Array;
     const [, seq, dim] = output.dims as number[];
@@ -612,7 +644,9 @@ class WorkerRuntime {
 
 const runtime = new WorkerRuntime();
 
-export default async function processFile(input: ProcessFileInput): Promise<ProcessFileResult> {
+export default async function processFile(
+  input: ProcessFileInput,
+): Promise<ProcessFileResult> {
   return runtime.processFile(input);
 }
 

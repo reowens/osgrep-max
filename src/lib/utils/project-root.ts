@@ -77,5 +77,7 @@ function ensureGitignoreEntry(root: string) {
 
   const needsNewline = contents.length > 0 && !contents.endsWith("\n");
   const prefix = needsNewline ? "\n" : "";
-  fs.writeFileSync(gitignorePath, `${contents}${prefix}.osgrep\n`, { encoding: "utf-8" });
+  fs.writeFileSync(gitignorePath, `${contents}${prefix}.osgrep\n`, {
+    encoding: "utf-8",
+  });
 }

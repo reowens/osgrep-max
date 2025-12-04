@@ -1,8 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import ignore from "ignore";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const SERVE_IGNORE_PATTERNS = [
   "*.lock",
@@ -33,7 +33,9 @@ describe("serve watcher ignore predicate", () => {
   it("does not throw on the root path and ignores osgrep/git internals", async () => {
     const filter = ignore().add(SERVE_IGNORE_PATTERNS);
     const ignored = (watchedPath: string | Buffer) => {
-      const rel = path.relative(tempRoot, watchedPath.toString()).replace(/\\/g, "/");
+      const rel = path
+        .relative(tempRoot, watchedPath.toString())
+        .replace(/\\/g, "/");
       if (!rel) return false;
       return (
         filter.ignores(rel) ||
