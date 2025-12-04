@@ -214,7 +214,7 @@ export class WorkerOrchestrator {
       return {
         ...chunk,
         vector: hybrid.dense,
-        colbert: hybrid.colbert,
+        colbert: Buffer.from(hybrid.colbert),
         colbert_scale: hybrid.scale,
         pooled_colbert_48d: hybrid.pooled_colbert_48d,
       };
@@ -301,9 +301,14 @@ export class WorkerOrchestrator {
           ? col
           : Buffer.isBuffer(col)
             ? new Int8Array(col.buffer, col.byteOffset, col.byteLength)
-            : new Int8Array(col);
+            : col &&
+              typeof col === "object" &&
+              "type" in col &&
+              (col as any).type === "Buffer" &&
+              Array.isArray((col as any).data)
+              ? new Int8Array((col as any).data)
+              : new Int8Array(col as any);
 
-      if (!colbert.length) return 0;
       const seqLen = Math.floor(colbert.length / input.colbertDim);
       const docMatrix: Float32Array[] = [];
       for (let i = 0; i < seqLen; i++) {
