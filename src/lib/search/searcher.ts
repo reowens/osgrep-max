@@ -11,7 +11,7 @@ import { escapeSqlString, normalizePath } from "../utils/filter-builder";
 import { getWorkerPool } from "../workers/pool";
 
 export class Searcher {
-  constructor(private db: VectorDB) {}
+  constructor(private db: VectorDB) { }
 
   private mapRecordToChunk(
     record: Partial<VectorRecord>,
@@ -49,9 +49,7 @@ export class Searcher {
       adjusted *= 1.25;
     }
     const pathStr = (record.path || "").toLowerCase();
-    // Aggressive test detection: match "test" or "spec" anywhere in the path
-    // but try to avoid common false positives like "latest" or "special" if possible.
-    // However, the user requested aggressive matching, so we will follow the PR's lead.
+
     if (
       pathStr.includes("test") ||
       pathStr.includes("spec") ||
@@ -143,8 +141,9 @@ export class Searcher {
     const scores = await pool.rerank({
       query: queryMatrixRaw.map((row: number[]) => Array.from(row)),
       docs: candidates.map((doc) => ({
-        colbert:
-          (doc.colbert as Buffer | Int8Array | number[]) ?? new Int8Array(),
+        colbert: Buffer.from(
+          (doc.colbert as Buffer | Int8Array | number[]) ?? []
+        ),
         scale: typeof doc.colbert_scale === "number" ? doc.colbert_scale : 1,
       })),
       colbertDim,

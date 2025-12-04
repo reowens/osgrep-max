@@ -86,7 +86,6 @@ export const search: Command = new CommanderCommand("search")
 
       const hasRows = await vectorDb.hasAnyRows();
       const needsSync = options.sync || !hasRows;
-      let didSync = false;
 
       if (needsSync) {
         const isTTY = process.stdout.isTTY;
@@ -140,7 +139,6 @@ export const search: Command = new CommanderCommand("search")
           spinner.succeed(
             `${options.sync ? "Indexing" : "Initial indexing"} complete (${result.processed}/${result.total}) • indexed ${result.indexed}${failedSuffix}`,
           );
-          didSync = true;
         } catch (e) {
           spinner.fail("Indexing failed");
           throw e;
@@ -174,10 +172,6 @@ export const search: Command = new CommanderCommand("search")
       });
 
       console.log(output);
-
-      if (!didSync && !options.sync && !options.dryRun) {
-        console.log("\nHint: Use --sync to ensure results are up-to-date.");
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       console.error("Search failed:", message);
