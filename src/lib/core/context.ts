@@ -28,7 +28,9 @@ export function createFileSystem(
       }
     },
     isIgnored(filePath: string, root: string) {
-      const rel = path.relative(root, filePath).replace(/\\/g, "/");
+      const relRaw = path.relative(root, filePath);
+      if (!relRaw) return false;
+      const rel = relRaw.replace(/\\/g, "/");
       return filter.ignores(rel);
     },
     async *getFiles(root: string) {
