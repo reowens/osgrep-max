@@ -1,16 +1,19 @@
 import * as path from "node:path";
 import type { Command } from "commander";
 import { Command as CommanderCommand } from "commander";
+import { ensureGrammars } from "../lib/index/grammar-loader";
+import {
+  createIndexingSpinner,
+  formatDryRunSummary,
+} from "../lib/index/sync-helpers";
+import { initialSync } from "../lib/index/syncer";
+import { Searcher } from "../lib/search/searcher";
 import { ensureSetup } from "../lib/setup/setup-helpers";
 import type { FileMetadata, SearchResponse } from "../lib/store/types";
-import { createIndexingSpinner, formatDryRunSummary } from "../lib/index/sync-helpers";
-import { formatTextResults, type TextResult } from "../lib/utils/formatter";
-import { initialSync } from "../lib/index/syncer";
-import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 import { VectorDB } from "../lib/store/vector-db";
-import { Searcher } from "../lib/search/searcher";
-import { ensureGrammars } from "../lib/index/grammar-loader";
 import { gracefulExit } from "../lib/utils/exit";
+import { formatTextResults, type TextResult } from "../lib/utils/formatter";
+import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 
 function toTextResults(data: SearchResponse["data"]): TextResult[] {
   return data.map((r) => {
@@ -40,22 +43,13 @@ export const search: Command = new CommanderCommand("search")
     "10",
   )
   .option("-c, --content", "Show full chunk content instead of snippets", false)
-  .option(
-    "--per-file <n>",
-    "Number of matches to show per file",
-    "1",
-  )
+  .option("--per-file <n>", "Number of matches to show per file", "1")
   .option("--scores", "Show relevance scores", false)
   .option("--compact", "Show file paths only", false)
   .option("--plain", "Disable ANSI colors and use simpler formatting", false)
   .option(
     "-s, --sync",
     "Syncs the local files to the store before searching",
-    false,
-  )
-  .option(
-    "-d, --dry-run",
-    "Dry run the search process (no actual file syncing)",
     false,
   )
   .argument("<pattern>", "The pattern to search for")
@@ -83,9 +77,7 @@ export const search: Command = new CommanderCommand("search")
 
     try {
       await ensureSetup();
-      const searchRoot = exec_path
-        ? path.resolve(exec_path)
-        : root;
+      const searchRoot = exec_path ? path.resolve(exec_path) : root;
       const projectRoot = findProjectRoot(searchRoot) ?? searchRoot;
       const paths = ensureProjectPaths(projectRoot);
       vectorDb = new VectorDB(paths.lancedbDir);
@@ -142,7 +134,8 @@ export const search: Command = new CommanderCommand("search")
           }
 
           await vectorDb.createFTSIndex();
-          const failedSuffix = result.failedFiles > 0 ? ` • ${result.failedFiles} failed` : "";
+          const failedSuffix =
+            result.failedFiles > 0 ? ` • ${result.failedFiles} failed` : "";
           spinner.succeed(
             `${options.sync ? "Indexing" : "Initial indexing"} complete (${result.processed}/${result.total}) • indexed ${result.indexed}${failedSuffix}`,
           );

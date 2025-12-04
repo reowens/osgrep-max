@@ -3,8 +3,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { Command } from "commander";
 import { MODEL_IDS, PATHS } from "../config";
-import { findProjectRoot } from "../lib/utils/project-root";
 import { gracefulExit } from "../lib/utils/exit";
+import { findProjectRoot } from "../lib/utils/project-root";
 
 export const doctor = new Command("doctor")
   .description("Check osgrep health and paths")
@@ -48,7 +48,9 @@ export const doctor = new Command("doctor")
     if (projectRoot) {
       console.log(`✅ Index found at: ${path.join(projectRoot, ".osgrep")}`);
     } else {
-      console.log(`ℹ️  No index found in current directory (run 'osgrep index' to create one)`);
+      console.log(
+        `ℹ️  No index found in current directory (run 'osgrep index' to create one)`,
+      );
     }
 
     console.log(

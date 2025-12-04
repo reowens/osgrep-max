@@ -1,8 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Command } from "commander";
-import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 import { gracefulExit } from "../lib/utils/exit";
+import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 
 const style = {
   bold: (s: string) => `\x1b[1m${s}\x1b[22m`,
@@ -46,7 +46,7 @@ function getDirectorySize(dirPath: string): number {
         totalSize += stats.size;
       }
     }
-  } catch { }
+  } catch {}
 
   return totalSize;
 }

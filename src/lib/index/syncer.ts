@@ -3,18 +3,15 @@ import * as path from "node:path";
 import fg from "fast-glob";
 import ignore from "ignore";
 import { CONFIG } from "../../config";
-import { ensureProjectPaths } from "../utils/project-root";
-import { DEFAULT_IGNORE_PATTERNS } from "./ignore-patterns";
-import {
-  type InitialSyncProgress,
-  type InitialSyncResult,
-} from "./sync-helpers";
-import { isIndexableFile } from "../utils/file-utils";
 import { MetaCache, type MetaEntry } from "../store/meta-cache";
-import { VectorDB } from "../store/vector-db";
-import { getWorkerPool } from "../workers/pool";
 import type { VectorRecord } from "../store/types";
+import { VectorDB } from "../store/vector-db";
+import { isIndexableFile } from "../utils/file-utils";
 import { acquireWriterLock, type LockHandle } from "../utils/lock";
+import { ensureProjectPaths } from "../utils/project-root";
+import { getWorkerPool } from "../workers/pool";
+import { DEFAULT_IGNORE_PATTERNS } from "./ignore-patterns";
+import type { InitialSyncProgress, InitialSyncResult } from "./sync-helpers";
 
 type SyncOptions = {
   projectRoot: string;
@@ -59,7 +56,9 @@ async function flushBatch(
   }
 }
 
-export async function initialSync(options: SyncOptions): Promise<InitialSyncResult> {
+export async function initialSync(
+  options: SyncOptions,
+): Promise<InitialSyncResult> {
   const {
     projectRoot,
     dryRun = false,
@@ -84,7 +83,7 @@ export async function initialSync(options: SyncOptions): Promise<InitialSyncResu
       metaCache.close();
       try {
         fs.rmSync(paths.lmdbPath, { force: true });
-      } catch { }
+      } catch {}
       metaCache = new MetaCache(paths.lmdbPath);
     }
 
@@ -302,7 +301,9 @@ export async function initialSync(options: SyncOptions): Promise<InitialSyncResu
     const stale = Array.from(cachedPaths).filter((p) => !seenPaths.has(p));
     if (!dryRun && stale.length > 0 && !shouldSkipCleanup) {
       await vectorDb.deletePaths(stale);
-      stale.forEach((p) => metaCache.delete(p));
+      stale.forEach((p) => {
+        metaCache.delete(p);
+      });
     }
 
     // Finalize total so callers can display a meaningful summary.

@@ -1,18 +1,22 @@
 import * as http from "node:http";
 import * as path from "node:path";
 import { Command } from "commander";
-import { ensureSetup } from "../lib/setup/setup-helpers";
 import { ensureGrammars } from "../lib/index/grammar-loader";
-import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
-import { gracefulExit } from "../lib/utils/exit";
-import { VectorDB } from "../lib/store/vector-db";
-import { Searcher } from "../lib/search/searcher";
-import { initialSync } from "../lib/index/syncer";
 import { createIndexingSpinner } from "../lib/index/sync-helpers";
+import { initialSync } from "../lib/index/syncer";
+import { Searcher } from "../lib/search/searcher";
+import { ensureSetup } from "../lib/setup/setup-helpers";
+import { VectorDB } from "../lib/store/vector-db";
+import { gracefulExit } from "../lib/utils/exit";
+import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 
 export const serve = new Command("serve")
   .description("Run osgrep as a background server with live indexing")
-  .option("-p, --port <port>", "Port to listen on", process.env.OSGREP_PORT || "4444")
+  .option(
+    "-p, --port <port>",
+    "Port to listen on",
+    process.env.OSGREP_PORT || "4444",
+  )
   .action(async (_args, cmd) => {
     const options: { port: string } = cmd.optsWithGlobals();
     const port = parseInt(options.port, 10);
@@ -73,7 +77,9 @@ export const serve = new Command("serve")
             req.on("end", async () => {
               if (aborted) return;
               try {
-                const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf-8")) : {};
+                const body = chunks.length
+                  ? JSON.parse(Buffer.concat(chunks).toString("utf-8"))
+                  : {};
                 const query = typeof body.query === "string" ? body.query : "";
                 const limit = typeof body.limit === "number" ? body.limit : 10;
 
@@ -109,15 +115,19 @@ export const serve = new Command("serve")
               } catch (err) {
                 res.statusCode = 500;
                 res.setHeader("Content-Type", "application/json");
-                res.end(JSON.stringify({ error: (err as Error)?.message || "search_failed" }));
+                res.end(
+                  JSON.stringify({
+                    error: (err as Error)?.message || "search_failed",
+                  }),
+                );
               }
             });
-            
+
             req.on("error", (err) => {
               console.error("[serve] request error:", err);
               aborted = true;
             });
-            
+
             return;
           }
 
@@ -134,7 +144,9 @@ export const serve = new Command("serve")
       });
 
       server.listen(port, () => {
-        console.log(`osgrep server listening on http://localhost:${port} (${projectRoot})`);
+        console.log(
+          `osgrep server listening on http://localhost:${port} (${projectRoot})`,
+        );
       });
       server.on("error", (err) => {
         console.error("[serve] server error:", err);
@@ -159,4 +171,4 @@ export const serve = new Command("serve")
       process.exitCode = 1;
       await gracefulExit(1);
     }
-});
+  });

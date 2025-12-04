@@ -47,7 +47,7 @@ function formatRelativePath(root: string, filePath?: string): string {
  */
 function createProgressTracker(): ProgressTracker {
   const startTime = Date.now();
-  let lastProcessed = 0;
+  const lastProcessed = 0;
 
   return {
     startTime,
@@ -109,12 +109,13 @@ export function createIndexingSpinner(
       tracker.update(info.processed, info.total);
 
       // Handle pre-indexing phases (before total is known or special messages)
-      if (info.filePath && (
-        info.filePath.startsWith('Scanning...') ||
-        info.filePath.startsWith('Checking index...') ||
-        info.filePath.startsWith('Processing') ||
-        info.filePath.startsWith('Checking for changes')
-      )) {
+      if (
+        info.filePath &&
+        (info.filePath.startsWith("Scanning...") ||
+          info.filePath.startsWith("Checking index...") ||
+          info.filePath.startsWith("Processing") ||
+          info.filePath.startsWith("Checking for changes"))
+      ) {
         spinner.text = info.filePath;
         if (process.env.OSGREP_DEBUG_INDEX === "1") {
           console.log(`[progress] ${info.filePath}`);

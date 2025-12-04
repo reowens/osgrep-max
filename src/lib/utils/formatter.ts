@@ -103,16 +103,17 @@ export function formatTextResults(
       const tags: string[] = [];
       const type = item.chunk_type || "";
       if (type.match(/function|class|method/)) tags.push("Definition");
-      if (relPath.includes("test") || relPath.includes("spec")) tags.push("Test");
+      if (relPath.includes("test") || relPath.includes("spec"))
+        tags.push("Test");
       const tagStr = tags.length > 0 ? ` [${tags.join(",")}]` : "";
 
       const lines = cleanSnippetLines(item.content);
       const truncated =
         !options.content && lines.length > maxLines
           ? [
-            ...lines.slice(0, maxLines),
-            `... (+${lines.length - maxLines} more lines)`,
-          ]
+              ...lines.slice(0, maxLines),
+              `... (+${lines.length - maxLines} more lines)`,
+            ]
           : lines;
 
       output += `${relPath}:${line}${tagStr}\n`;
@@ -141,7 +142,8 @@ export function formatTextResults(
         if (next.start_line <= current.end_line + 10) {
           current.content += `\n   // ...\n${next.content}`;
           current.end_line = next.end_line;
-          if (next.chunk_type?.match(/function|class/)) current.chunk_type = next.chunk_type;
+          if (next.chunk_type?.match(/function|class/))
+            current.chunk_type = next.chunk_type;
         } else {
           merged.push(current);
           current = next;
@@ -154,7 +156,8 @@ export function formatTextResults(
     for (const item of merged) {
       const tags: string[] = [];
       if (item.chunk_type?.match(/function|class/)) tags.push("Definition");
-      const tagStr = tags.length > 0 ? ` ${style.blue(`[${tags.join(", ")}]`)}` : "";
+      const tagStr =
+        tags.length > 0 ? ` ${style.blue(`[${tags.join(", ")}]`)}` : "";
 
       const line = Math.max(1, item.start_line + 1);
       const snippet = item.content
@@ -168,16 +171,19 @@ export function formatTextResults(
       const truncated =
         !options.content && lines.length > maxLines
           ? [
-            ...lines.slice(0, maxLines),
-            style.dim(`... (+${lines.length - maxLines} more lines)`),
-          ]
+              ...lines.slice(0, maxLines),
+              style.dim(`... (+${lines.length - maxLines} more lines)`),
+            ]
           : lines;
 
       // Apply syntax highlighting for humans
       let rendered = truncated.join("\n");
       try {
         const lang = detectLanguage(filePath);
-        rendered = highlight(rendered, { language: lang, ignoreIllegals: true });
+        rendered = highlight(rendered, {
+          language: lang,
+          ignoreIllegals: true,
+        });
       } catch {
         // fall back to non-highlighted text
       }

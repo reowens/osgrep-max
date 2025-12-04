@@ -1,15 +1,15 @@
 import * as path from "node:path";
 import { Command } from "commander";
-import { ensureSetup } from "../lib/setup/setup-helpers";
+import { ensureGrammars } from "../lib/index/grammar-loader";
 import {
   createIndexingSpinner,
   formatDryRunSummary,
 } from "../lib/index/sync-helpers";
 import { initialSync } from "../lib/index/syncer";
-import { ensureGrammars } from "../lib/index/grammar-loader";
-import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
+import { ensureSetup } from "../lib/setup/setup-helpers";
 import { VectorDB } from "../lib/store/vector-db";
 import { gracefulExit } from "../lib/utils/exit";
+import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 
 export const index = new Command("index")
   .description("Index the current directory and create searchable store")
@@ -29,8 +29,12 @@ export const index = new Command("index")
     false,
   )
   .action(async (_args, cmd) => {
-    const options: { store?: string; dryRun: boolean; path: string; reset: boolean } =
-      cmd.optsWithGlobals();
+    const options: {
+      store?: string;
+      dryRun: boolean;
+      path: string;
+      reset: boolean;
+    } = cmd.optsWithGlobals();
     let vectorDb: VectorDB | null = null;
 
     try {
@@ -43,7 +47,9 @@ export const index = new Command("index")
       vectorDb = new VectorDB(paths.lancedbDir);
 
       if (options.reset) {
-        console.log(`Resetting index at ${paths.osgrepDir} (waiting for lock)...`);
+        console.log(
+          `Resetting index at ${paths.osgrepDir} (waiting for lock)...`,
+        );
         // We do NOT manually drop/rm here anymore to avoid race conditions.
         // The syncer handles it inside the lock.
       }
@@ -79,7 +85,8 @@ export const index = new Command("index")
         spinner.text = "Building search index (FTS)...";
         await vectorDb.createFTSIndex();
 
-        const failedSuffix = result.failedFiles > 0 ? ` • ${result.failedFiles} failed` : "";
+        const failedSuffix =
+          result.failedFiles > 0 ? ` • ${result.failedFiles} failed` : "";
         spinner.succeed(
           `Indexing complete (${result.processed}/${result.total}) • indexed ${result.indexed}${failedSuffix}`,
         );
@@ -100,7 +107,11 @@ export const index = new Command("index")
         }
       }
       const code =
-        typeof process.exitCode === "number" ? process.exitCode : process.exitCode === undefined ? 0 : 1;
+        typeof process.exitCode === "number"
+          ? process.exitCode
+          : process.exitCode === undefined
+            ? 0
+            : 1;
       await gracefulExit(code);
     }
   });

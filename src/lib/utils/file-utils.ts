@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { extname } from "node:path";
-import { MAX_FILE_SIZE_BYTES, INDEXABLE_EXTENSIONS } from "../../config";
+import { INDEXABLE_EXTENSIONS, MAX_FILE_SIZE_BYTES } from "../../config";
 
 export function computeBufferHash(buffer: Buffer): string {
   return createHash("sha256").update(buffer).digest("hex");

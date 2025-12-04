@@ -1,7 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-function parseLock(lockPath: string): { pid: number | null; startedAt?: string } {
+function parseLock(lockPath: string): {
+  pid: number | null;
+  startedAt?: string;
+} {
   try {
     const contents = fs.readFileSync(lockPath, "utf-8").trim();
     const [pidLine, ts] = contents.split("\n");
@@ -61,7 +64,9 @@ export async function acquireWriterLock(lockDir: string): Promise<LockHandle> {
       await removeLock(lockPath);
       await writeLock();
     } else {
-      const holderDesc = pid ? `${pid}${startedAt ? ` @ ${startedAt}` : ""}` : "unknown";
+      const holderDesc = pid
+        ? `${pid}${startedAt ? ` @ ${startedAt}` : ""}`
+        : "unknown";
       throw new Error(
         `.osgrep lock already held (${holderDesc}). Another indexing process is running or the lock must be cleared.`,
       );

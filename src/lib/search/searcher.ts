@@ -1,17 +1,21 @@
+import type { Table } from "@lancedb/lancedb";
 import { CONFIG } from "../../config";
 import type {
+  ChunkType,
   SearchFilter,
   SearchResponse,
   VectorRecord,
-  ChunkType,
 } from "../store/types";
-import { VectorDB } from "../store/vector-db";
+import type { VectorDB } from "../store/vector-db";
 import { getWorkerPool } from "../workers/pool";
 
 export class Searcher {
-  constructor(private db: VectorDB) { }
+  constructor(private db: VectorDB) {}
 
-  private mapRecordToChunk(record: Partial<VectorRecord>, score: number): ChunkType {
+  private mapRecordToChunk(
+    record: Partial<VectorRecord>,
+    score: number,
+  ): ChunkType {
     const fullText = `${record.context_prev || ""}${record.content || ""}${record.context_next || ""} `;
     const startLine = record.start_line || 0;
     const endLine = record.end_line || startLine;
@@ -33,7 +37,10 @@ export class Searcher {
     };
   }
 
-  private applyStructureBoost(record: Partial<VectorRecord>, score: number): number {
+  private applyStructureBoost(
+    record: Partial<VectorRecord>,
+    score: number,
+  ): number {
     let adjusted = score;
     const chunkType = record.chunk_type || "";
     const boosted = ["function", "class", "method", "interface", "type_alias"];
@@ -72,8 +79,11 @@ export class Searcher {
 
     const pool = getWorkerPool();
 
-    const { dense: queryVector, colbert: queryMatrixRaw, colbertDim } =
-      await pool.encodeQuery(query);
+    const {
+      dense: queryVector,
+      colbert: queryMatrixRaw,
+      colbertDim,
+    } = await pool.encodeQuery(query);
 
     if (colbertDim !== CONFIG.COLBERT_DIM) {
       console.warn(
@@ -87,7 +97,7 @@ export class Searcher {
 
     const PRE_RERANK_K = Math.max(finalLimit * 3, 150);
 
-    let table;
+    let table: Table;
     try {
       table = await this.db.ensureTable();
     } catch {
@@ -102,14 +112,12 @@ export class Searcher {
 
     let ftsResults: VectorRecord[] = [];
     try {
-      let ftsQuery = table
-        .search(query)
-        .limit(PRE_RERANK_K);
+      let ftsQuery = table.search(query).limit(PRE_RERANK_K);
       if (whereClause) {
         ftsQuery = ftsQuery.where(whereClause);
       }
       ftsResults = (await ftsQuery.toArray()) as VectorRecord[];
-    } catch (e) {
+    } catch (_e) {
       // ignore fts failures
     }
 
@@ -131,7 +139,8 @@ export class Searcher {
     const scores = await pool.rerank({
       query: queryMatrixRaw.map((row: number[]) => Array.from(row)),
       docs: candidates.map((doc) => ({
-        colbert: (doc.colbert as Buffer | Int8Array | number[]) ?? new Int8Array(),
+        colbert:
+          (doc.colbert as Buffer | Int8Array | number[]) ?? new Int8Array(),
         scale: typeof doc.colbert_scale === "number" ? doc.colbert_scale : 1,
       })),
       colbertDim,

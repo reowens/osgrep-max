@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import ora from "ora";
-import { areModelsDownloaded, downloadModels } from "./model-loader";
 import { PATHS } from "../../config";
+import { areModelsDownloaded, downloadModels } from "./model-loader";
 
 export interface SetupPaths {
   root: string;

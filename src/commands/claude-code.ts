@@ -33,7 +33,9 @@ async function installPlugin() {
     console.log(
       "3. Claude will use osgrep for semantic code search automatically",
     );
-    console.log("4. You can also use `osgrep` commands directly in your terminal");
+    console.log(
+      "4. You can also use `osgrep` commands directly in your terminal",
+    );
   } catch (error) {
     console.error("❌ Error installing plugin:");
     console.error(error);
