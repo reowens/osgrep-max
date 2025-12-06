@@ -52,6 +52,8 @@ export class VectorDB {
       context_prev: "",
       context_next: "",
       chunk_type: "",
+      complexity: 0,
+      is_exported: false,
       vector: Array(CONFIG.VECTOR_DIM).fill(0),
       colbert: Buffer.alloc(0),
       colbert_scale: 1,
@@ -64,6 +66,20 @@ export class VectorDB {
       role: "",
       parent_symbol: "",
     };
+  }
+
+  private validateSchema(table: lancedb.Table) {
+    const schema = table.schemaSync();
+    const fields = new Set(schema.fields.map((f) => f.name));
+    const required = ["complexity", "is_exported"];
+    const missing = required.filter((r) => !fields.has(r));
+    if (missing.length > 0) {
+      throw new Error(
+        `[vector-db] schema missing fields (${missing.join(
+          ", ",
+        )}). Please run "osgrep index --reset" to rebuild the index.`,
+      );
+    }
   }
 
   private buildSchema(): Schema {
@@ -88,6 +104,8 @@ export class VectorDB {
       new Field("context_prev", new Utf8(), true),
       new Field("context_next", new Utf8(), true),
       new Field("chunk_type", new Utf8(), true),
+      new Field("complexity", new Float32(), true),
+      new Field("is_exported", new Bool(), true),
       new Field("colbert", new Binary(), true),
       new Field("colbert_scale", new Float64(), true),
       new Field(
@@ -123,7 +141,9 @@ export class VectorDB {
   async ensureTable(): Promise<lancedb.Table> {
     const db = await this.getDb();
     try {
-      return await db.openTable(TABLE_NAME);
+      const table = await db.openTable(TABLE_NAME);
+      this.validateSchema(table);
+      return table;
     } catch (_err) {
       const schema = this.buildSchema();
       const table = await db.createTable(TABLE_NAME, [this.seedRow()], {
@@ -205,6 +225,9 @@ export class VectorDB {
         context_prev: rec.context_prev ?? "",
         context_next: rec.context_next ?? "",
         chunk_type: rec.chunk_type ?? "",
+        complexity:
+          typeof rec.complexity === "number" ? rec.complexity : undefined,
+        is_exported: rec.is_exported ?? false,
         vector: vec,
         colbert: toBuffer(rec.colbert),
         colbert_scale:

@@ -92,7 +92,7 @@ export async function initialSync(
     onProgress,
     signal,
   } = options;
-  const paths = ensureProjectPaths(projectRoot, { dryRun });
+  const paths = ensureProjectPaths(projectRoot);
 
   // Propagate project root to worker processes
   process.env.OSGREP_PROJECT_ROOT = paths.root;

@@ -14,17 +14,17 @@ export interface ProjectPaths {
 export function findProjectRoot(startDir = process.cwd()): string | null {
   const start = path.resolve(startDir);
 
-  // Check if there's an existing .osgrep directory in the current directory
+  // Only consider the current directory; do not climb above the user's cwd.
   const osgrepDir = path.join(start, ".osgrep");
+  const gitDir = path.join(start, ".git");
   if (
-    fs.existsSync(osgrepDir) &&
+    (fs.existsSync(osgrepDir) || fs.existsSync(gitDir)) &&
     path.resolve(start) !== path.resolve(PATHS.globalRoot)
   ) {
     return start;
   }
 
-  // Otherwise, use the current directory as the root (don't walk up)
-  // This allows separate indexes per subdirectory and matches user expectations
+  // Otherwise, treat the current dir as the root (per-subdirectory isolation).
   return start;
 }
 
