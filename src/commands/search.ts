@@ -91,9 +91,7 @@ export const search: Command = new CommanderCommand("search")
       await ensureSetup();
       const searchRoot = exec_path ? path.resolve(exec_path) : root;
       const projectRoot = findProjectRoot(searchRoot) ?? searchRoot;
-      const paths = ensureProjectPaths(projectRoot, {
-        dryRun: options.dryRun,
-      });
+      const paths = ensureProjectPaths(projectRoot);
 
       // Propagate project root to worker processes
       process.env.OSGREP_PROJECT_ROOT = projectRoot;
