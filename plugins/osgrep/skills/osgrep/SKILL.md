@@ -13,7 +13,7 @@ If any `osgrep` command returns a status indicating **"Indexing"**, **"Building"
    *(Do not assume you should proceed without confirmation).*
 
 ## Core Commands
-- Search: `osgrep search "how does auth work"`
+- Search: `osgrep "how does auth work"`
 - Trace: `osgrep trace "AuthService"`
 - Symbols: `osgrep symbols "Auth"`
 
@@ -31,13 +31,13 @@ If any `osgrep` command returns a status indicating **"Indexing"**, **"Building"
 
 ## Quick Patterns
 1) “How does X work?”
-   - `osgrep search "how does X work"`
+   - `osgrep "how does X work"`
    - Read the top ORCH hits.
 2) “Who calls this?”
    - `osgrep --trace "SymbolName"`
    - Read callers/callees, then jump with `Read`.
 3) Narrow scope:
-   - `osgrep search "auth middleware" src/server`
+   - `osgrep "auth middleware" src/server`
 
 ## Command Reference
 
@@ -67,7 +67,7 @@ List defined symbols.
 
 1. **Discover** - Use `search` to find relevant code by concept
     ```bash
-    osgrep search "worker pool lifecycle" --compact
+    osgrep "worker pool lifecycle" --compact
     # → src/lib/workers/pool.ts:112 WorkerPool
     ```
 
