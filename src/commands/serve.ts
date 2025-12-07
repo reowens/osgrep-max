@@ -211,8 +211,9 @@ export const serve = new Command("serve")
           if (nextPort < startPort + 10) {
             console.log(`Port ${port} in use, retrying with ${nextPort}...`);
             port = nextPort;
-            server.close();
-            server.listen(port);
+            server.close(() => {
+              server.listen(port);
+            });
             return;
           }
           console.error(
