@@ -21,7 +21,7 @@ If the tool output says **"Indexing"**, **"Building"**, or **"Syncing"**:
 3. **ASK** if they want to proceed or wait.
 
 ## Commands
-- Search: \`osgrep search "auth logic"\`
+- Search: \`osgrep "auth logic" --compact\`
 - Trace: \`osgrep trace "AuthService"\`
 `;
 
@@ -37,7 +37,7 @@ async function installPlugin() {
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
 
     let content = fs.existsSync(destPath) ? fs.readFileSync(destPath, "utf-8") : "";
-    
+
     // Only append if not present
     if (!content.includes("name: osgrep")) {
       fs.appendFileSync(destPath, "\n" + SKILL);

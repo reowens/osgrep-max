@@ -21,7 +21,7 @@ If any \`osgrep\` command returns a status indicating **"Indexing"**, **"Buildin
    *(Do not assume you should proceed without confirmation).*
 
 ## Core Commands
-- Search: \`osgrep search "how does auth work"\`
+- Search: \`osgrep "how does auth work" --compact\`
 - Trace: \`osgrep trace "AuthService"\`
 - Symbols: \`osgrep symbols "Auth"\`
 
@@ -34,7 +34,7 @@ If any \`osgrep\` command returns a status indicating **"Indexing"**, **"Buildin
 
 1. **Discover**
    \`\`\`bash
-   osgrep search "worker pool lifecycle" --compact
+   osgrep "worker pool lifecycle" --compact
    \`\`\`
 
 2. **Explore**
@@ -117,7 +117,7 @@ async function installPlugin() {
   // We expect these files to exist in your dist/hooks folder
   const startJsPath = path.join(hooksDir, "osgrep_start.js");
   const stopJsPath = path.join(hooksDir, "osgrep_stop.js");
-  
+
   // Create these scripts dynamically if we don't want to read from dist
   const startScript = `
 const { spawn } = require("child_process");
@@ -156,10 +156,10 @@ async function uninstallPlugin() {
   const root = resolveDroidRoot();
   const hooksDir = path.join(root, "hooks", "osgrep");
   const skillsDir = path.join(root, "skills", "osgrep");
-  
+
   if (fs.existsSync(hooksDir)) fs.rmSync(hooksDir, { recursive: true, force: true });
   if (fs.existsSync(skillsDir)) fs.rmSync(skillsDir, { recursive: true, force: true });
-  
+
   console.log("✅ osgrep removed from Factory Droid");
   console.log("NOTE: You may want to manually clean up 'hooks' in ~/.factory/settings.json");
 }

@@ -34,7 +34,7 @@ description: Semantic code search. The indexer (daemon) is ALREADY RUNNING.
 allowed-tools: "Bash(osgrep:*), Read"
 ---
 Commands:
-- Search: osgrep search "auth logic" (Finds implementation concepts)
+- Search: osgrep "auth logic" --compact (Finds implementation concepts)
 - Trace: osgrep trace "AuthService" (Finds callers/callees)
 - Symbols: osgrep symbols "Auth"
 
