@@ -339,16 +339,8 @@ export const search: Command = new CommanderCommand("search")
 
         if (response.ok) {
           const body = await response.json() as { results: any[] };
-          // Reuse existing formatting logic
-          // We need to mimic the structure searcher returns: { data: body.results }
+
           const searchResult = { data: body.results };
-
-          // Copy-paste of formatting logic below (refactoring would be better but keeping it simple for now)
-          // Actually, let's just jump to the rendering block if we can, 
-          // but the rendering block is deep inside.
-          // I will duplicate the rendering logic slightly or structure it to share.
-
-          // Let's just render and return here to avoid deep nesting issues
           const compactHits = options.compact
             ? toCompactHits(searchResult.data)
             : [];
@@ -393,10 +385,9 @@ export const search: Command = new CommanderCommand("search")
           return; // EXIT successful server search
         }
       } catch (e) {
-        // Fallback silently or warn?
-        // User requested it, so maybe debug log? 
-        // SKILL says: "If osgrep command returns status indicating Indexing..."
-        // We'll just fall back to local mode.
+        if (process.env.DEBUG) {
+          console.error("[search] server request failed, falling back to local:", e);
+        }
       }
     }
 
