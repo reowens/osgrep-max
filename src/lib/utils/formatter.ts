@@ -59,6 +59,10 @@ function cleanSnippetLines(snippet: string): string[] {
     });
 }
 
+/**
+ * Formats search results for display (agent plain mode or human pretty mode).
+ * Supports compact (paths only), score display, and content truncation options.
+ */
 export function formatTextResults(
   results: TextResult[],
   query: string,
@@ -120,7 +124,10 @@ export function formatTextResults(
           ]
           : lines;
 
-      output += `${relPath}:${line}${tagStr}\n`;
+      const scoreStr = options.showScores
+        ? ` ${style.dim(`(score: ${item.score.toFixed(3)})`)}`
+        : "";
+      output += `${relPath}:${line}${scoreStr}${tagStr}\n`;
       truncated.forEach((ln) => {
         output += `  ${ln}\n`;
       });
@@ -131,9 +138,8 @@ export function formatTextResults(
   }
 
   // --- MODE B: HUMAN (Pretty) ---
-  let output = `\n${style.bold(`osgrep results (query: "${query}", ${results.length} matches across ${fileCount} files)`)}\n`;
-  let rank = 1;
-
+  // First pass: merge chunks and count actual displayed results
+  const mergedGroups: Array<{ filePath: string; merged: TextResult[] }> = [];
   for (const [filePath, chunks] of fileGroups) {
     // 1. Sort by score descending (best matches first)
     chunks.sort((a, b) => b.score - a.score);
@@ -158,12 +164,19 @@ export function formatTextResults(
             current.chunk_type = next.chunk_type;
         } else {
           merged.push(current);
-          current = next;
+          current = { ...next };
         }
       }
       merged.push(current);
     }
+    mergedGroups.push({ filePath, merged });
+  }
 
+  const displayedCount = mergedGroups.reduce((sum, g) => sum + g.merged.length, 0);
+  let output = `\n${style.bold(`osgrep results (query: "${query}", ${displayedCount} matches across ${fileCount} files)`)}\n`;
+  let rank = 1;
+
+  for (const { filePath, merged } of mergedGroups) {
     const relPath = path.relative(root, filePath);
     for (const item of merged) {
       const tags: string[] = [];
@@ -216,6 +229,6 @@ export function formatTextResults(
       rank++;
     }
   }
-  output += style.dim(`${results.length} matches across ${fileCount} files`);
+  output += style.dim(`${displayedCount} matches across ${fileCount} files`);
   return output.trimEnd();
 }
