@@ -30,29 +30,84 @@ import { tool } from "@opencode-ai/plugin";
 const SKILL = \`
 ---
 name: osgrep
-description: Semantic code search. The indexer (daemon) is ALREADY RUNNING.
+description: Semantic code search. Finds code by concept, compresses files to skeletons. Use instead of grep/ripgrep/reading whole files.
 allowed-tools: "Bash(osgrep:*), Read"
 ---
-Commands:
-- Search: osgrep "where does the code validate JWT tokens and check expiration" --compact
-- Trace: osgrep trace "AuthService" (Finds callers/callees)
-- Symbols: osgrep symbols "Auth"
 
-## ⚡ CRITICAL: Use SPECIFIC Queries
-**Semantic search requires detailed, contextual queries to work well.**
-- ✅ GOOD: "where does the worker pool respawn crashed child processes"
-- ✅ GOOD: "middleware that validates user permissions before database writes"
-- ❌ WEAK: "auth logic" (too vague for semantic matching)
-- ❌ WEAK: "validation" (needs context)
+## When to Use osgrep
 
-**More words = better results.** Be specific about what you're looking for.
+USE osgrep for:
+- "Explain the architecture" 
+- "How does X work?"
+- "Find where Y happens"
+- "What are the main components?"
 
-## ⚠️ CRITICAL: Handling "Indexing" State
-If any \\\`osgrep\\\` command returns a status indicating **"Indexing"**, **"Building"**, or **"Syncing"**:
-1. **STOP** your current train of thought.
-2. **INFORM** the user: "The semantic index is currently building. Search results will be incomplete."
-3. **ASK**: "Do you want me to proceed with partial results, or wait for indexing to finish?"
-   *(Do not assume you should proceed without confirmation).*
+DON'T use for:
+- You already know the exact file and line
+- Simple string search in one file
+
+## Commands
+
+osgrep "how requests flow from client to server"   # Semantic search
+osgrep "auth" --skeleton                           # Search + compress results
+osgrep skeleton src/server.ts                      # Compress specific file  
+osgrep trace handleRequest                         # Who calls / what calls
+osgrep symbols                                     # List main symbols
+
+## Workflow: Architecture Questions
+
+Query: "Explain client-server architecture, identify key files, show request flow"
+
+# 1. Find entry points
+osgrep "where do client requests enter the server"
+
+# 2. Get structure of key files (80-95% smaller than reading)
+osgrep skeleton src/server/handler.ts
+osgrep skeleton src/client/api.ts
+
+# 3. Trace the flow
+osgrep trace handleRequest
+
+# 4. Read specific code ONLY if needed
+Read src/server/handler.ts:45-60
+
+## Workflow: Find Specific Code
+
+Query: "Where is JWT validation?"
+
+osgrep "JWT token validation and expiration checking"
+# -> src/auth/jwt.ts:45  validateToken  ORCH
+
+Read src/auth/jwt.ts:45-80
+
+## Output Guide
+
+### Search Results (--compact)
+# path                lines   score  role  defined
+# src/auth/jwt.ts     45-89   .94    ORCH  validateToken
+
+- ORCH = orchestrates other code (usually what you want)
+- DEF = definition (class, type)
+
+### Skeleton Output
+# Shows signatures, hides bodies
+# Summary: what it calls, complexity, role
+# ~85 tokens vs ~800 for full file
+
+## Query Tips
+
+# Bad - too vague
+osgrep "auth"
+
+# Good - specific intent  
+osgrep "where does the server validate JWT tokens before processing requests"
+
+More words = better results. Describe what you're looking for like you'd ask a colleague.
+
+## If Index is Building
+
+If you see "Indexing" or "Syncing": STOP. Tell the user the index is building. Ask if they want to wait or proceed with partial results.
+
 \`;
 
 export default tool({
@@ -130,13 +185,14 @@ async function install() {
     config.mcp.osgrep = {
       type: "local",
       command: ["osgrep", "mcp"],
-      enabled: true
+      enabled: true,
     };
 
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
     console.log("✅ Registered MCP server in", CONFIG_PATH);
-    console.log("   Command: check proper path if 'osgrep' is not in PATH of OpenCode.");
-
+    console.log(
+      "   Command: check proper path if 'osgrep' is not in PATH of OpenCode.",
+    );
   } catch (err) {
     console.error("❌ Installation failed:", err);
   }
@@ -165,7 +221,6 @@ async function uninstall() {
       fs.unlinkSync(PLUGIN_PATH);
       console.log("✅ Cleaned up plugin file.");
     }
-
   } catch (err) {
     console.error("❌ Uninstall failed:", err);
   }
