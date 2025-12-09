@@ -1,111 +1,96 @@
 ---
 name: osgrep
-description: Semantic code search and call-graph tracing for AI agents. Finds code by concept, surfaces roles (ORCHESTRATION vs DEFINITION), and traces dependencies. Output is compact TSV for low token use.
+description: Semantic code search. Finds code by concept, compresses files to skeletons. Use instead of grep/ripgrep/reading whole files.
 allowed-tools: "Bash(osgrep:*), Read"
-license: Apache-2.0
 ---
 
-## ⚠️ CRITICAL: Handling "Indexing" State
-If any `osgrep` command returns a status indicating **"Indexing"**, **"Building"**, or **"Syncing"**:
-1. **STOP** your current train of thought.
-2. **INFORM** the user: "The semantic index is currently building. Search results will be incomplete."
-3. **ASK**: "Do you want me to proceed with partial results, or wait for indexing to finish?"
-   *(Do not assume you should proceed without confirmation).*
+## When to Use osgrep
 
-## Core Commands
-- Search: `osgrep "where is JWT token validation and expiration checking"`
-- Trace: `osgrep trace "AuthService"`
-- Symbols: `osgrep symbols "Auth"`
+**USE osgrep for:**
+- "Explain the architecture" 
+- "How does X work?"
+- "Find where Y happens"
+- "What are the main components?"
 
-## ⚡ Query Tips: Be SPECIFIC
-**Semantic search works best with detailed, contextual queries.**
-- ✅ GOOD: "where is JWT token validation and expiration checking"
-- ✅ GOOD: "how does the worker pool handle crashed processes"
-- ✅ GOOD: "middleware that checks user permissions before API calls"
-- ❌ WEAK: "auth logic" (too vague, poor semantic signal)
-- ❌ WEAK: "validation" (too generic, needs context)
+**DON'T use for:**
+- You already know the exact file and line
+- Simple string search in one file
 
-**More words = better semantic matching.** Add context, intent, and specifics.
+## Commands
 
-## Output (Default = Compact TSV)
-- One line per hit: `path\tlines\tscore\trole\tconf\tdefined\tpreview`
-- Header includes query and count.
-- Roles are short (`ORCH/DEF/IMPL`), confidence is `H/M/L`, scores are short (`.942`).
-- Use `path` + `lines` with `Read` to fetch real code.
-
-## When to Use
-- Find implementations: "where does the code validate user input before database insertion"
-- Understand concepts: "how does express middleware chain requests to handlers"
-- Explore architecture: "authentication flow from login to session creation"
-- Trace impact: "who calls X / what does X call"
-
-## Quick Patterns
-1) "How does X work?"
-   - `osgrep "how does the authentication middleware verify JWT tokens and check permissions"`
-   - Read the top ORCH hits.
-2) "Who calls this?"
-   - `osgrep --trace "SymbolName"`
-   - Read callers/callees, then jump with `Read`.
-3) Narrow scope:
-   - `osgrep "middleware that authenticates API requests using bearer tokens" src/server`
-   
-**Remember:** Longer, more specific queries significantly improve semantic search quality.
-
-## Command Reference
-
-### `search [pattern] [path]`
-Semantic search. Returns ranked results with roles (ORCH/DEF/IMPL).
-- `--compact`: TSV output (default for agents).
-- `--max-count N`: Limit results.
-
-### `trace <symbol>`
-Show call graph for a specific symbol.
-- Callers: Who calls this?
-- Callees: What does this call?
-- Definition: Where is it defined?
-
-### `symbols [filter]`
-List defined symbols.
-- No args: List top 20 most referenced symbols.
-- With filter: List symbols matching the pattern.
-- `-l N`: Limit number of results.
-
-## Useful Options
-- `-m <n>` - Limit max results (default: 10)
-- `--compact` - Show file paths only
-
-Example with filtering:
 ```bash
-osgrep "user authentication with password hashing and session tokens"
+osgrep "how requests flow from client to server"   # Semantic search
+osgrep "auth" --skeleton                           # Search + compress results
+osgrep skeleton src/server.ts                      # Compress specific file  
+osgrep trace handleRequest                         # Who calls / what calls
+osgrep symbols                                     # List main symbols
 ```
 
-## Tips
-- Previews are hints; not a full substitute for reading the file.
-- **Results are hybrid (semantic + literal); LONGER, MORE SPECIFIC natural language queries work significantly better than short generic terms.**
-- Think of queries like asking a colleague: be specific about what you're looking for.
-- If results span many dirs, start with ORCH hits to map the flow.
+## Workflow: Architecture Questions
 
-## Typical Workflow
+**Query:** "Explain client-server architecture, identify key files, show request flow"
 
-1. **Discover** - Use `search` to find relevant code by concept
-    ```bash
-    osgrep "worker pool lifecycle" --compact
-    # → src/lib/workers/pool.ts:112 WorkerPool
-    ```
+```bash
+# 1. Find entry points
+osgrep "where do client requests enter the server"
 
-2. **Explore** - Use `symbols` to see related symbols
-    ```bash
-    osgrep symbols Worker
-    # → WorkerPool, WorkerOrchestrator, spawnWorker, etc.
-    ```
+# 2. Get structure of key files (80-95% smaller than reading)
+osgrep skeleton src/server/handler.ts
+osgrep skeleton src/client/api.ts
 
-3. **Trace** - Use `trace` to map dependencies
-    ```bash
-    osgrep trace WorkerPool
-    # → Shows callers, callees, definition
-    ```
+# 3. Trace the flow
+osgrep trace handleRequest
 
-4. **Read** - Use the file paths from above with `Read` tool
-    ```bash
-    Read src/lib/workers/pool.ts:112-186
-    ```
+# 4. Read specific code ONLY if needed
+Read src/server/handler.ts:45-60
+```
+
+## Workflow: Find Specific Code
+
+**Query:** "Where is JWT validation?"
+
+```bash
+osgrep "JWT token validation and expiration checking"
+# → src/auth/jwt.ts:45  validateToken  ORCH
+
+Read src/auth/jwt.ts:45-80
+```
+
+## Output Guide
+
+### Search Results (--compact)
+```
+path                lines   score  role  defined
+src/auth/jwt.ts     45-89   .94    ORCH  validateToken
+```
+- **ORCH** = orchestrates other code (usually what you want)
+- **DEF** = definition (class, type)
+
+### Skeleton Output
+```typescript
+// src/auth/jwt.ts (skeleton, ~85 tokens)
+export class JWTService {
+  validateToken(token: string): Claims {
+    // -> decode, verify, isExpired | C:8 | ORCH
+  }
+}
+```
+- Shows signatures, hides bodies
+- Summary: what it calls, complexity, role
+- **~85 tokens vs ~800 for full file**
+
+## Query Tips
+
+```bash
+# Bad - too vague
+osgrep "auth"
+
+# Good - specific intent  
+osgrep "where does the server validate JWT tokens before processing requests"
+```
+
+**More words = better results.** Describe what you're looking for like you'd ask a colleague.
+
+## If Index is Building
+
+If you see "Indexing" or "Syncing": STOP. Tell the user the index is building. Ask if they want to wait or proceed with partial results.
