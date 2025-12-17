@@ -230,4 +230,20 @@ describe("unknown option handling", () => {
       })
     ).rejects.toThrow(/too many arguments/i);
   });
+
+  it("rejects multiple unknown options", async () => {
+    await expect(
+      (search as Command).parseAsync(["--json", "--xml", "query", "."], {
+        from: "user",
+      })
+    ).rejects.toThrow(/unknown option/i);
+  });
+
+  it("rejects unknown options mixed with valid options", async () => {
+    await expect(
+      (search as Command).parseAsync(["query", "--no-rerank", "--json", "."], {
+        from: "user",
+      })
+    ).rejects.toThrow(/unknown option/i);
+  });
 });
