@@ -106,10 +106,6 @@ osgrep trace handleRequest
 - Don't read entire files. Use the line ranges osgrep gives you.
 - If results seem off, rephrase your query like you'd ask a teammate
 
-## If Index is Building
-
-If you see "Indexing" or "Syncing": STOP. Tell the user the index is building. Ask if they want to wait or proceed with partial results.
-
 \`;
 
 export default tool({
@@ -119,37 +115,10 @@ export default tool({
       .describe("Arguments for osgrep, e.g. ['search', 'user auth']")
   },
   async execute({ argv }) {
-    // Use the plugin context's shell ($) for safe execution if available, 
-    // or Bun's $ if running in that environment (which OpenCode does).
-    // The previous mgrep example used Bun.$. 
-    // But here we are writing a file that OpenCode runs. 
-    // If OpenCode uses Bun, we can use Bun.$. 
-    // The user's prompt example used Bun.$.
-    
-    // We'll rely on global Bun object or simply child_process since we are in a shim.
-    // However, the mgrep example shows: const out = await Bun.$\`mgrep \${argv}\`.text()
-    // Let's stick to that if possible, but safely.
-    // If Bun is not available, we might break. But OpenCode seems to be Bun-based.
-    
-    // safe join if argv is array? 
-    // Actually the user provided: const out = await Bun.$\`osgrep \${argv}\`.text()
-    
-    // We must ensure 'osgrep' is in PATH or use absolute path? 
-    // The mgrep example relied on 'mgrep' being in PATH.
-    
     try {
       // @ts-ignore
       const out = await Bun.spawn(["osgrep", ...argv], { stdout: "pipe" }).stdout;
       const text = await new Response(out).text();
-      // Simple guard for indexing message
-      if (text.includes("Indexing") || text.includes("Building") || text.includes("Syncing")) {
-         return \`WARN: The index is currently updating. 
-         
-         Output so far:
-         \${text.trim()}
-         
-         PLEASE READ THE "Indexing" WARNING IN MY SKILL DESCRIPTION.\`;
-      }
       return text.trim();
     } catch (err) {
        return \`Error running osgrep: \${err}\`;
