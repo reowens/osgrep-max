@@ -21,7 +21,7 @@ function runClaudeCommand(args: string[]): Promise<void> {
 
 async function installPlugin() {
   try {
-    await runClaudeCommand(["marketplace", "add", "Ryandonofrio3/osgrep"]);
+    await runClaudeCommand(["marketplace", "add", "reowens/osgrep-max"]);
     console.log("✅ Successfully added the osgrep marketplace");
     await runClaudeCommand(["install", "osgrep"]);
     console.log("✅ Successfully installed the osgrep plugin for Claude Code");

@@ -2,7 +2,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 export const MODEL_IDS = {
-  embed: "onnx-community/granite-embedding-30m-english-ONNX",
+  embed: "onnx-community/granite-embedding-small-english-r2-ONNX",
   colbert: "ryandono/mxbai-edge-colbert-v0-17m-onnx-int8",
 };
 

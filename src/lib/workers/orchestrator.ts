@@ -21,6 +21,7 @@ import {
 import { maxSim } from "./colbert-math";
 import { ColbertModel, type HybridResult } from "./embeddings/colbert";
 import { GraniteModel } from "./embeddings/granite";
+import { mlxEmbed } from "./embeddings/mlx-client";
 
 export type ProcessFileInput = {
   path: string;
@@ -109,7 +110,10 @@ export class WorkerOrchestrator {
     for (let i = 0; i < texts.length; i += BATCH_SIZE) {
       if (i > 0) onProgress?.();
       const batchTexts = texts.slice(i, i + BATCH_SIZE);
-      const denseBatch = await this.granite.runBatch(batchTexts);
+      // Try MLX GPU server first, fall back to ONNX CPU
+      const denseBatch =
+        (await mlxEmbed(batchTexts)) ??
+        (await this.granite.runBatch(batchTexts));
       const colbertBatch = await this.colbert.runBatch(
         batchTexts,
         denseBatch,
@@ -283,7 +287,9 @@ export class WorkerOrchestrator {
   }> {
     await this.ensureReady();
 
-    const [denseVector] = await this.granite.runBatch([text]);
+    // Try MLX GPU server first, fall back to ONNX CPU
+    const mlxResult = await mlxEmbed([text]);
+    const denseVector = mlxResult?.[0] ?? (await this.granite.runBatch([text]))[0];
 
     const encoded = await this.colbert.encodeQuery(text);
 
