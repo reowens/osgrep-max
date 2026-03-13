@@ -140,7 +140,7 @@ async function ensureDaemon(projectRoot: string): Promise<boolean> {
   }
 
   console.log("[MCP] Starting serve daemon...");
-  const child = spawn("osgrep", ["serve", "-b"], {
+  const child = spawn("osgrep", ["serve", "-b", "--no-idle-timeout"], {
     cwd: projectRoot,
     detached: true,
     stdio: "ignore",
