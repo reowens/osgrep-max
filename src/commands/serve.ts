@@ -69,8 +69,9 @@ export const serve = new Command("serve")
   )
   .option("-b, --background", "Run in background", false)
   .option("--cpu", "Use CPU-only embeddings (skip MLX GPU server)", false)
+  .option("--no-idle-timeout", "Disable the 30-minute idle shutdown", false)
   .action(async (_args, cmd) => {
-    const options: { port: string; background: boolean; cpu: boolean } =
+    const options: { port: string; background: boolean; cpu: boolean; idleTimeout: boolean } =
       cmd.optsWithGlobals();
     let port = parseInt(options.port, 10);
     const startPort = port;
@@ -193,16 +194,19 @@ export const serve = new Command("serve")
       console.log("[serve] File watcher active");
 
       // Idle timeout: shut down if no searches for 30 minutes
-      const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+      // Disabled when started by MCP server (--no-idle-timeout)
       let lastActivity = Date.now();
-      const idleCheck = setInterval(() => {
-        if (Date.now() - lastActivity > IDLE_TIMEOUT_MS) {
-          console.log("[serve] Idle timeout reached, shutting down.");
-          clearInterval(idleCheck);
-          process.kill(process.pid, "SIGTERM");
-        }
-      }, 60_000);
-      idleCheck.unref();
+      if (options.idleTimeout) {
+        const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+        const idleCheck = setInterval(() => {
+          if (Date.now() - lastActivity > IDLE_TIMEOUT_MS) {
+            console.log("[serve] Idle timeout reached, shutting down.");
+            clearInterval(idleCheck);
+            process.kill(process.pid, "SIGTERM");
+          }
+        }, 60_000);
+        idleCheck.unref();
+      }
 
       const server = http.createServer(async (req, res) => {
         try {
