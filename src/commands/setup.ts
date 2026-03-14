@@ -81,7 +81,7 @@ export const setup = new Command("setup")
           hint: "Apple Silicon only, faster indexing + search",
         },
       ],
-      initialValue: existingConfig?.embedMode ?? "cpu",
+      initialValue: existingConfig?.embedMode ?? (process.arch === "arm64" && process.platform === "darwin" ? "gpu" : "cpu"),
     });
 
     if (p.isCancel(embedMode)) {

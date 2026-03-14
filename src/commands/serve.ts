@@ -112,11 +112,13 @@ export const serve = new Command("serve")
     // Propagate project root to worker processes
     process.env.OSGREP_PROJECT_ROOT = projectRoot;
 
-    // Determine embed mode: --cpu flag overrides, then config, then default to cpu
+    // Determine embed mode: --cpu flag overrides, then config, then default
+    // Default to GPU on Apple Silicon, CPU everywhere else
+    const isAppleSilicon = process.arch === "arm64" && process.platform === "darwin";
     const indexConfig = readIndexConfig(paths.configPath);
     const useGpu = options.cpu
       ? false
-      : indexConfig?.embedMode === "gpu";
+      : (indexConfig?.embedMode ?? (isAppleSilicon ? "gpu" : "cpu")) === "gpu";
     const mlxModel = indexConfig?.mlxModel;
 
     // MLX GPU embed server — started when GPU mode is active.
@@ -229,7 +231,7 @@ export const serve = new Command("serve")
                 chunks: dbStats.chunks,
                 totalBytes: dbStats.totalBytes,
                 vectorDim: cfg?.vectorDim ?? null,
-                embedMode: cfg?.embedMode ?? "cpu",
+                embedMode: cfg?.embedMode ?? (isAppleSilicon ? "gpu" : "cpu"),
                 model: cfg?.embedModel ?? null,
                 mlxModel: cfg?.mlxModel ?? null,
                 indexedAt: cfg?.indexedAt ?? null,
