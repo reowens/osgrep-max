@@ -64,7 +64,7 @@
     "ora": "^5.4.1",
     "piscina": "^5.1.4",
     "simsimd": "^6.5.5",
-    "uuid": "^9.0.1",
+    "uuid": "^13.0.0",
     "web-tree-sitter": "^0.26.6",
     "zod": "^4.1.12"
   },
@@ -72,7 +72,6 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.76",
     "@biomejs/biome": "2.4.7",
     "@types/node": "^25.5.0",
-    "@types/uuid": "^9.0.8",
     "node-gyp": "^12.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
