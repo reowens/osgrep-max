@@ -46,6 +46,10 @@ describe("Server Registry", () => {
 
     const servers = await listServers();
     expect(Array.isArray(servers)).toBe(true);
+    expect(servers.length).toBe(1);
+    expect(servers[0].pid).toBe(process.pid);
+    expect(servers[0].port).toBe(4444);
+    expect(servers[0].projectRoot).toBe("/test/project1");
     expect(isProcessRunning(process.pid)).toBe(true);
   });
 
@@ -68,6 +72,9 @@ describe("Server Registry", () => {
 
     const servers = await listServers();
     expect(Array.isArray(servers)).toBe(true);
+    expect(servers.length).toBe(1);
+    expect(servers[0].port).toBe(5555);
+    expect(servers[0].projectRoot).toBe("/test/project1");
   });
 
   it("unregisterServer removes entry from registry", async () => {
@@ -92,6 +99,7 @@ describe("Server Registry", () => {
 
     const servers = await listServers();
     expect(Array.isArray(servers)).toBe(true);
+    expect(servers.length).toBe(0);
   });
 
   it("listAllServers returns all registered servers", async () => {
@@ -118,6 +126,7 @@ describe("Server Registry", () => {
 
     const servers = await listServers();
     expect(Array.isArray(servers)).toBe(true);
+    expect(servers.length).toBe(3);
   });
 
   it("clearAllServers empties the registry", async () => {
@@ -144,6 +153,7 @@ describe("Server Registry", () => {
 
     const servers = await listServers();
     expect(Array.isArray(servers)).toBe(true);
+    expect(servers.length).toBe(0);
   });
 
   it("listAllServers returns empty array when registry does not exist", async () => {
@@ -151,6 +161,7 @@ describe("Server Registry", () => {
 
     const servers = await listServers();
     expect(Array.isArray(servers)).toBe(true);
+    expect(servers.length).toBe(0);
   });
 });
 

@@ -3,18 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import ignore from "ignore";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-const SERVE_IGNORE_PATTERNS = [
-  "*.lock",
-  "*.bin",
-  "*.ipynb",
-  "*.pyc",
-  "pnpm-lock.yaml",
-  "package-lock.json",
-  "yarn.lock",
-  "bun.lockb",
-  ".osgrep/**",
-];
+import { WATCHER_IGNORE_PATTERNS } from "../src/lib/index/watcher";
 
 describe("serve watcher ignore predicate", () => {
   let tempRoot: string;
@@ -30,18 +19,31 @@ describe("serve watcher ignore predicate", () => {
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
 
+  it("WATCHER_IGNORE_PATTERNS contains expected directory patterns", () => {
+    expect(WATCHER_IGNORE_PATTERNS.length).toBeGreaterThan(0);
+    const strings = WATCHER_IGNORE_PATTERNS.filter(
+      (p): p is string => typeof p === "string",
+    );
+    expect(strings).toContain("**/node_modules/**");
+    expect(strings).toContain("**/.git/**");
+    expect(strings).toContain("**/.osgrep/**");
+  });
+
   it("does not throw on the root path and ignores osgrep/git internals", async () => {
-    const filter = ignore().add(SERVE_IGNORE_PATTERNS);
+    const globPatterns = WATCHER_IGNORE_PATTERNS.filter(
+      (p): p is string => typeof p === "string",
+    );
+    const regexPatterns = WATCHER_IGNORE_PATTERNS.filter(
+      (p): p is RegExp => p instanceof RegExp,
+    );
+    const filter = ignore().add(globPatterns);
+
     const ignored = (watchedPath: string | Buffer) => {
-      const rel = path
-        .relative(tempRoot, watchedPath.toString())
-        .replace(/\\/g, "/");
+      const pathStr = watchedPath.toString();
+      const rel = path.relative(tempRoot, pathStr).replace(/\\/g, "/");
       if (!rel) return false;
-      return (
-        filter.ignores(rel) ||
-        watchedPath.toString().includes(`${path.sep}.git${path.sep}`) ||
-        watchedPath.toString().includes(`${path.sep}.osgrep${path.sep}`)
-      );
+      if (filter.ignores(rel)) return true;
+      return regexPatterns.some((rx) => rx.test(pathStr));
     };
 
     expect(() => ignored(tempRoot)).not.toThrow();
