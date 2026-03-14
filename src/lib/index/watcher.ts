@@ -20,6 +20,25 @@ interface WatcherOptions {
   onReindex?: (files: number, durationMs: number) => void;
 }
 
+// Chokidar ignored — must exclude heavy directories to keep FD count low.
+// On macOS, chokidar uses FSEvents (single FD) but falls back to fs.watch()
+// (one FD per directory) if FSEvents isn't available or for some subdirs.
+export const WATCHER_IGNORE_PATTERNS: Array<string | RegExp> = [
+  "**/node_modules/**",
+  "**/.git/**",
+  "**/.osgrep/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/out/**",
+  "**/target/**",
+  "**/__pycache__/**",
+  "**/coverage/**",
+  "**/venv/**",
+  "**/.next/**",
+  "**/lancedb/**",
+  /(^|[\/\\])\../, // dotfiles
+];
+
 const DEBOUNCE_MS = 2000;
 const FTS_REBUILD_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -30,27 +49,8 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
   let processing = false;
   let closed = false;
 
-  // Chokidar ignored — must exclude heavy directories to keep FD count low.
-  // On macOS, chokidar uses FSEvents (single FD) but falls back to fs.watch()
-  // (one FD per directory) if FSEvents isn't available or for some subdirs.
-  const ignored = [
-    "**/node_modules/**",
-    "**/.git/**",
-    "**/.osgrep/**",
-    "**/dist/**",
-    "**/build/**",
-    "**/out/**",
-    "**/target/**",
-    "**/__pycache__/**",
-    "**/coverage/**",
-    "**/venv/**",
-    "**/.next/**",
-    "**/lancedb/**",
-    /(^|[\/\\])\../, // dotfiles
-  ];
-
   const watcher: FSWatcher = watch(projectRoot, {
-    ignored,
+    ignored: WATCHER_IGNORE_PATTERNS,
     ignoreInitial: true,
     persistent: true,
     // Use polling to avoid EMFILE in large monorepos.

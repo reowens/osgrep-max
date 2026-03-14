@@ -167,7 +167,7 @@ async function ensureDaemon(projectRoot: string): Promise<boolean> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function toStringArray(val: unknown): string[] {
+export function toStringArray(val: unknown): string[] {
   if (Array.isArray(val)) return val.filter((v) => typeof v === "string");
   if (val && typeof (val as any).toArray === "function") {
     try {
@@ -180,16 +180,16 @@ function toStringArray(val: unknown): string[] {
   return [];
 }
 
-type ToolResult = {
+export type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
 };
 
-function ok(text: string): ToolResult {
+export function ok(text: string): ToolResult {
   return { content: [{ type: "text", text }] };
 }
 
-function err(text: string): ToolResult {
+export function err(text: string): ToolResult {
   return { content: [{ type: "text", text }], isError: true };
 }
 

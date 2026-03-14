@@ -349,6 +349,7 @@ The MLX embed server runs on port `8100` by default (configurable via `MLX_EMBED
 ```bash
 pnpm install
 pnpm build        # or pnpm dev
+pnpm test         # vitest
 pnpm format       # biome check
 ```
 
