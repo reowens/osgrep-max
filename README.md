@@ -22,7 +22,7 @@ Natural-language search that works like `grep`. Fast, local, and built for codin
 - **Semantic:** Finds concepts ("where do transactions get created?"), not just strings.
 - **Call Graph Tracing:** Map dependencies with `trace` to see who calls what.
 - **Role Detection:** Distinguishes `ORCHESTRATION` (high-level logic) from `DEFINITION` (types/classes).
-- **Local & Private:** 100% local embeddings via `onnxruntime-node`.
+- **Local & Private:** 100% local embeddings via ONNX (CPU) or MLX (Apple Silicon GPU).
 - **Auto-Isolated:** Each repository gets its own index automatically.
 - **Agent-Ready:** Native output with symbols, roles, and call graphs.
 
@@ -39,7 +39,7 @@ Natural-language search that works like `grep`. Fast, local, and built for codin
     osgrep setup
     ```
 
-    Downloads embedding models (~150MB) upfront. If you skip this, models download automatically on first use.
+    Downloads embedding models (~150MB) upfront and lets you choose between CPU (ONNX) and GPU (MLX) embedding modes. If you skip this, models download automatically on first use.
 
 3.  **Search**
 
@@ -77,11 +77,33 @@ In our public benchmarks, `osgrep` can save about 20% of your LLM tokens and del
 3. Highly recommend indexing your code base before using the plugin.
 4. The plugin's hooks auto-start `osgrep serve` in the background and shut it down on session end. Claude will use `osgrep` for semantic searches automatically but can be encouraged to do so.
 
-## Opencode Plugin
+### Opencode Plugin
 1. Run `osgrep install-opencode`
 2. Open OC (`opencode`) and ask it questions about your codebase.
 3. Highly recommend indexing your code base before using the plugin.
 4. The plugin's hooks auto-start `osgrep serve` in the background and shut it down on session end. OC will use `osgrep` for semantic searches automatically but can be encouraged to do so.
+
+### Codex Plugin
+1. Run `osgrep install-codex`
+2. Codex will use `osgrep` for semantic searches.
+
+### MCP Server
+
+osgrep exposes tools via the [Model Context Protocol](https://modelcontextprotocol.io/) for any MCP-compatible AI agent or editor.
+
+```bash
+osgrep mcp
+```
+
+This starts a stdio-based MCP server that auto-launches the `osgrep serve` daemon. Available tools:
+
+| Tool | Description |
+| --- | --- |
+| `semantic_search` | Natural language code search with score filtering and per-file caps |
+| `code_skeleton` | Collapsed file structure (~4x fewer tokens than reading the full file) |
+| `trace_calls` | Call graph — who calls a symbol and what it calls |
+| `list_symbols` | List indexed functions, classes, and types with definition locations |
+| `index_status` | Check daemon status, file count, embed mode, and index age |
 
 
 ## Commands
@@ -98,14 +120,17 @@ osgrep "how is the database connection pooled?"
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `-m <n>` | Max total results to return. | `25` |
-| `--per-file <n>` | Max matches to show per file. | `1` |
+| `-m <n>` | Max total results to return. | `5` |
+| `--per-file <n>` | Max matches to show per file. | `3` |
 | `-c`, `--content` | Show full chunk content instead of snippets. | `false` |
 | `--scores` | Show relevance scores (0-1) for each result. | `false` |
 | `--min-score <n>` | Filter out results below this score threshold. | `0` |
-| `--compact` | Show file paths only (like `grep -l`). | `false` |
+| `--compact` | Compact hits view (paths + line ranges + role/preview). | `false` |
+| `--skeleton` | Show code skeleton for matching files instead of snippets. | `false` |
+| `--plain` | Disable ANSI colors and use simpler formatting. | `false` |
 | `-s`, `--sync` | Force re-index changed files before searching. | `false` |
-| `-r`, `--reset` | Reset the index and re-index from scratch. | `false` |
+| `-d`, `--dry-run` | Show what would be indexed without actually indexing. | `false` |
+
 **Examples:**
 
 ```bash
@@ -120,6 +145,9 @@ osgrep "user validation" --compact
 
 # Show relevance scores and filter low-confidence matches
 osgrep "authentication" --scores --min-score 0.5
+
+# Show skeletons of matching files
+osgrep "database connection" --skeleton
 ```
 
 ### `osgrep index`
@@ -139,7 +167,6 @@ Manually indexes the repository. Useful if you want to pre-warm the cache or if 
 | `-p`, `--path <dir>` | Path to index (defaults to current directory). | `.` |
 | `-r`, `--reset` | Remove existing index and re-index from scratch. | `false` |
 | `-v`, `--verbose` | Show detailed progress with file names. | `false` |
-| `--allow-fallback` | Also index files without TreeSitter grammar support. | `false` |
 
 **Examples:**
 
@@ -147,7 +174,6 @@ Manually indexes the repository. Useful if you want to pre-warm the cache or if 
 osgrep index                    # Index current dir
 osgrep index --dry-run          # See what would be indexed
 osgrep index --verbose          # Watch detailed progress (useful for debugging)
-osgrep index --allow-fallback   # Include files without grammar support
 osgrep index --reset            # Full re-index from scratch
 ```
 
@@ -156,22 +182,26 @@ osgrep index --reset            # Full re-index from scratch
 Runs a lightweight HTTP server with live file watching so searches stay hot in RAM.
 
 - Keeps LanceDB and the embedding worker resident for <50ms responses.
-- Watches the repo (via chokidar) and incrementally re-indexes on change.
-- Health endpoint: `GET /health`
-- Search endpoint: `POST /search` with `{ query, limit, path, rerank }`
-- Writes lock: `.osgrep/server.json` with `port`/`pid`
+- **Live reindexing:** Watches the repo (via chokidar) and incrementally re-indexes on file change.
+- **Idle timeout:** Automatically shuts down after 30 minutes of inactivity (disable with `--no-idle-timeout`).
+- Endpoints:
+  - `GET /health` — liveness check
+  - `GET /stats` — file count, chunk count, embed mode, index age, watcher status
+  - `POST /search` — `{ query, limit, path }`
 
 **Options:**
 
 | Flag | Description |
 | --- | --- |
-| `-p, --port <port>` | Port to listen on (auto-increments if not specified) |
+| `-p, --port <port>` | Port to listen on (default `4444`, retries up to 10 ports if taken) |
 | `-b, --background` | Run server in background and exit immediately |
+| `--cpu` | Use CPU-only embeddings (skip MLX GPU server) |
+| `--no-idle-timeout` | Disable the 30-minute idle shutdown |
 
 **Port Selection (priority order):**
 1. Explicit `-p <port>` flag
 2. `OSGREP_PORT` environment variable
-3. Auto-increment from registry (last used port + 1, or 4444 if no servers)
+3. Default `4444` (auto-increments if in use)
 
 **Usage:**
 
@@ -293,12 +323,22 @@ osgrep respects both `.gitignore` and `.osgrepignore` files when indexing. Creat
 - Supports glob patterns, negation (`!`), and directory patterns (`/`)
 
 
-### Manual Store Management
+### Index Management
 
-- **View all stores:** `osgrep list`
-- **Override auto-detection:** `osgrep --store custom-name "query"`
-- **Clean up old stores:** `rm -rf ~/.osgrep/data/store-name`
-- **Data location:** `~/.osgrep/data`
+- **View indexed projects:** `osgrep list`
+- **Index location:** `.osgrep/` in each project root
+- **Clean up a project index:** `rm -rf .osgrep/` in the project directory
+- **Global data (models, grammars):** `~/.osgrep/`
+
+### GPU Embeddings (Apple Silicon)
+
+On Macs with Apple Silicon, osgrep can use MLX for GPU-accelerated embeddings instead of ONNX on CPU.
+
+1. Run `osgrep setup` and select **GPU (MLX)** when prompted.
+2. Start the server: `osgrep serve` (automatically starts the MLX embed server).
+3. To force CPU mode on a GPU-configured project: `osgrep serve --cpu`.
+
+The MLX embed server runs on port `8100` by default (configurable via `MLX_EMBED_PORT`). It is managed automatically by `osgrep serve` — you don't need to start it manually.
 
 ## Development
 
@@ -310,11 +350,11 @@ pnpm format       # biome check
 
 ## Troubleshooting
 
-- **Index feels stale?** Run `osgrep index` to refresh.
+- **Index feels stale?** Run `osgrep index` to refresh, or use `osgrep serve` for live reindexing.
 - **Weird results?** Run `osgrep doctor` to verify models.
 - **Index getting stuck?** Run `osgrep index --verbose` to see which file is being processed.
-- **Want faster indexing?** Keep fallback disabled (default) to skip files without TreeSitter support.
-- **Need a fresh start?** Delete `~/.osgrep/data` and `~/.osgrep/meta.json` and run `osgrep index`.
+- **Need a fresh start?** Delete `.osgrep/` in your project root and run `osgrep index`.
+- **MLX server won't start?** Check `/tmp/mlx-embed-server.log` for errors. Use `osgrep serve --cpu` to fall back to CPU.
 
 ## Attribution
 
