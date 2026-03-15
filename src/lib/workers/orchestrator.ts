@@ -64,12 +64,17 @@ if (fs.existsSync(LOCAL_MODELS)) {
 }
 
 export class WorkerOrchestrator {
-  private granite = new GraniteModel();
+  private granite: GraniteModel;
   private colbert = new ColbertModel();
   private chunker = new TreeSitterChunker();
   private skeletonizer = new Skeletonizer();
   private initPromise: Promise<void> | null = null;
-  private readonly vectorDimensions = CONFIG.VECTOR_DIM;
+  private readonly vectorDimensions: number;
+
+  constructor(vectorDim?: number) {
+    this.vectorDimensions = vectorDim ?? CONFIG.VECTOR_DIM;
+    this.granite = new GraniteModel(this.vectorDimensions);
+  }
 
   private async ensureReady() {
     if (this.granite.isReady() && this.colbert.isReady()) {
@@ -289,7 +294,8 @@ export class WorkerOrchestrator {
 
     // Try MLX GPU server first, fall back to ONNX CPU
     const mlxResult = await mlxEmbed([text]);
-    const denseVector = mlxResult?.[0] ?? (await this.granite.runBatch([text]))[0];
+    const denseVector =
+      mlxResult?.[0] ?? (await this.granite.runBatch([text]))[0];
 
     const encoded = await this.colbert.encodeQuery(text);
 

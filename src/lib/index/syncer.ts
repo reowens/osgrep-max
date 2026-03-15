@@ -6,17 +6,18 @@ import type { VectorRecord } from "../store/types";
 import { VectorDB } from "../store/vector-db";
 import { isIndexableFile } from "../utils/file-utils";
 import { acquireWriterLockWithRetry, type LockHandle } from "../utils/lock";
+import { registerProject } from "../utils/project-registry";
 import { ensureProjectPaths } from "../utils/project-root";
 import { getWorkerPool } from "../workers/pool";
 import type { ProcessFileResult } from "../workers/worker";
-import type { InitialSyncProgress, InitialSyncResult } from "./sync-helpers";
-import { walk } from "./walker";
-
 import {
+  checkModelMismatch,
+  readGlobalConfig,
   readIndexConfig,
   writeIndexConfig,
-  checkModelMismatch,
 } from "./index-config";
+import type { InitialSyncProgress, InitialSyncResult } from "./sync-helpers";
+import { walk } from "./walker";
 
 type SyncOptions = {
   projectRoot: string;
@@ -396,6 +397,18 @@ export async function initialSync(
     // Write model config so future runs can detect model changes
     if (!dryRun) {
       writeIndexConfig(paths.configPath);
+
+      // Register project in global registry
+      const globalConfig = readGlobalConfig();
+      registerProject({
+        root: paths.root,
+        name: path.basename(paths.root),
+        vectorDim: globalConfig.vectorDim,
+        modelTier: globalConfig.modelTier,
+        embedMode: globalConfig.embedMode,
+        lastIndexed: new Date().toISOString(),
+        chunkCount: indexed,
+      });
     }
 
     // Finalize total so callers can display a meaningful summary.

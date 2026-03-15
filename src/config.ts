@@ -1,8 +1,39 @@
 import * as os from "node:os";
 import * as path from "node:path";
 
+export const MODEL_TIERS: Record<
+  string,
+  {
+    id: string;
+    label: string;
+    onnxModel: string;
+    mlxModel: string;
+    vectorDim: number;
+    params: string;
+  }
+> = {
+  small: {
+    id: "small",
+    label: "granite-small (384d, 47M params, fast)",
+    onnxModel: "onnx-community/granite-embedding-small-english-r2-ONNX",
+    mlxModel: "ibm-granite/granite-embedding-small-english-r2",
+    vectorDim: 384,
+    params: "47M",
+  },
+  standard: {
+    id: "standard",
+    label: "granite-r2 (768d, 149M params, better quality)",
+    onnxModel: "onnx-community/granite-embedding-english-r2-ONNX",
+    mlxModel: "ibm-granite/granite-embedding-english-r2",
+    vectorDim: 768,
+    params: "149M",
+  },
+};
+
+export const DEFAULT_MODEL_TIER = "small";
+
 export const MODEL_IDS = {
-  embed: "onnx-community/granite-embedding-small-english-r2-ONNX",
+  embed: MODEL_TIERS[DEFAULT_MODEL_TIER].onnxModel,
   colbert: "ryandono/mxbai-edge-colbert-v0-17m-onnx-int8",
 };
 

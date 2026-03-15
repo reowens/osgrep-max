@@ -19,7 +19,11 @@ const log = (...args: unknown[]) => {
 export class GraniteModel {
   private session: ort.InferenceSession | null = null;
   private tokenizer: PreTrainedTokenizer | null = null;
-  private readonly vectorDimensions = CONFIG.VECTOR_DIM;
+  private readonly vectorDimensions: number;
+
+  constructor(vectorDim?: number) {
+    this.vectorDimensions = vectorDim ?? CONFIG.VECTOR_DIM;
+  }
 
   private resolvePaths(): { modelPath: string; tokenizerPath: string } {
     const basePath = path.join(CACHE_DIR, MODEL_IDS.embed);
