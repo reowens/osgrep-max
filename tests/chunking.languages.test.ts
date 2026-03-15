@@ -11,6 +11,15 @@ const hasSwiftGrammar = fs.existsSync(
 const hasKotlinGrammar = fs.existsSync(
   path.join(GRAMMARS_DIR, "tree-sitter-kotlin.wasm"),
 );
+const hasBashGrammar = fs.existsSync(
+  path.join(GRAMMARS_DIR, "tree-sitter-bash.wasm"),
+);
+const hasScalaGrammar = fs.existsSync(
+  path.join(GRAMMARS_DIR, "tree-sitter-scala.wasm"),
+);
+const hasLuaGrammar = fs.existsSync(
+  path.join(GRAMMARS_DIR, "tree-sitter-lua.wasm"),
+);
 
 const SWIFT_CODE = `import Foundation
 
@@ -29,6 +38,40 @@ class Person: Greetable {
 func createPerson(_ name: String) -> Person {
     return Person(name: name)
 }
+`;
+
+const BASH_CODE = `#!/bin/bash
+
+function greet() {
+    echo "Hello, $1"
+}
+
+function farewell() {
+    echo "Goodbye, $1"
+}
+`;
+
+const SCALA_CODE_SNIPPET = `object Main {
+  def greet(name: String): String = {
+    s"Hello, $name"
+  }
+
+  class Person(val name: String) {
+    def hello(): String = {
+      greet(name)
+    }
+  }
+}
+`;
+
+const LUA_CODE = `function greet(name)
+    print("Hello, " .. name)
+end
+
+function farewell(name)
+    print("Goodbye, " .. name)
+    greet(name)
+end
 `;
 
 const KOTLIN_CODE = `import kotlin.math.sqrt
@@ -127,5 +170,59 @@ describe.skipIf(!hasKotlinGrammar)("Kotlin chunking", () => {
     expect(metadata.imports).toEqual(
       expect.arrayContaining([expect.stringContaining("kotlin.math.sqrt")]),
     );
+  });
+});
+
+describe.skipIf(!hasBashGrammar)("Bash chunking", () => {
+  it("extracts function definitions", async () => {
+    const chunker = new TreeSitterChunker();
+    const { chunks } = await chunker.chunk("script.sh", BASH_CODE);
+
+    const defined = chunks.flatMap((c) => c.definedSymbols ?? []);
+    expect(defined).toContain("greet");
+    expect(defined).toContain("farewell");
+
+    const types = chunks.map((c) => c.type);
+    expect(types).toContain("function");
+  });
+});
+
+describe.skipIf(!hasScalaGrammar)("Scala chunking", () => {
+  it("extracts function, class, and object definitions", async () => {
+    const chunker = new TreeSitterChunker();
+    const { chunks } = await chunker.chunk("Main.scala", SCALA_CODE_SNIPPET);
+
+    const defined = chunks.flatMap((c) => c.definedSymbols ?? []);
+    expect(defined).toContain("Main");
+    expect(defined).toContain("greet");
+    expect(defined).toContain("Person");
+
+    const types = chunks.map((c) => c.type);
+    expect(types).toContain("function");
+  });
+});
+
+describe.skipIf(!hasLuaGrammar)("Lua chunking", () => {
+  it("extracts function definitions", async () => {
+    const chunker = new TreeSitterChunker();
+    const { chunks } = await chunker.chunk("init.lua", LUA_CODE);
+
+    const defined = chunks.flatMap((c) => c.definedSymbols ?? []);
+    expect(defined).toContain("greet");
+    expect(defined).toContain("farewell");
+
+    const types = chunks.map((c) => c.type);
+    expect(types).toContain("function");
+  });
+
+  it("extracts referenced symbols from call expressions", async () => {
+    const chunker = new TreeSitterChunker();
+    const { chunks } = await chunker.chunk("init.lua", LUA_CODE);
+
+    const farewellChunk = chunks.find((c) =>
+      c.definedSymbols?.includes("farewell"),
+    );
+    expect(farewellChunk).toBeDefined();
+    expect(farewellChunk!.referencedSymbols).toContain("greet");
   });
 });

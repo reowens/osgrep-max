@@ -416,6 +416,7 @@ export class TreeSitterChunker {
           "type_identifier",
           "field_identifier",
           "simple_identifier", // Swift, Kotlin
+          "word", // Bash
         ].includes(c.type),
       );
       if (identifierChild?.text) return String(identifierChild.text);
@@ -562,8 +563,12 @@ export class TreeSitterChunker {
 
         const referencedSymbols: string[] = [];
         const extractRefs = (n: TreeSitterNode) => {
-          // Handle JS/TS (call_expression) and Python (call)
-          if (n.type === "call_expression" || n.type === "call") {
+          // Handle JS/TS (call_expression), Python (call), Lua (function_call)
+          if (
+            n.type === "call_expression" ||
+            n.type === "call" ||
+            n.type === "function_call"
+          ) {
             const func = n.childForFieldName
               ? n.childForFieldName("function")
               : null;
