@@ -1,17 +1,17 @@
 <div align="center">
-  <h1>osgrep</h1>
+  <h1>grepmax</h1>
   <p><em>Slash tokens. Save time. Semantic search for your coding agent.</em></p>
 
   <a href="https://opensource.org/licenses/Apache-2.0">
     <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0" />
   </a>
 
-  <a href="https://deepwiki.com/reowens/osgrep-max">
+  <a href="https://deepwiki.com/reowens/grepmax">
     <img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" />
   </a>
 
 <a>
-  <img alt="CodeRabbit Pull Request Reviews" src="https://img.shields.io/coderabbit/prs/github/reowens/osgrep-max">
+  <img alt="CodeRabbit Pull Request Reviews" src="https://img.shields.io/coderabbit/prs/github/reowens/grepmax">
 </a>
 </div>
 
@@ -30,7 +30,7 @@ Natural-language search that works like `grep`. Fast, local, and built for codin
 
 1. **Install**
    ```bash
-   npm install -g osgrep
+   npm install -g grepmax
    ```
 
 2.  **Setup (Recommended)**
@@ -62,7 +62,7 @@ To find the symbols in your code base:
     osgrep symbols
     ```
 
-In our public benchmarks, `osgrep` can save about 20% of your LLM tokens and deliver a 30% speedup.
+In our public benchmarks, `grepmax` can save about 20% of your LLM tokens and deliver a 30% speedup.
 
 <div align="center">
   <img src="public/bench.png" alt="osgrep benchmark" width="100%" style="border-radius: 8px; margin: 20px 0;" />
@@ -161,7 +161,7 @@ Manually indexes the repository. Useful if you want to pre-warm the cache or if 
 - Respects `.gitignore` and `.osgrepignore` (see [Configuration](#ignoring-files) section).
 - **Smart Indexing:** Only embeds code and config files. Skips binaries, lockfiles, and minified assets.
 - **Bounded Concurrency:** Uses a fixed thread pool to keep your system responsive.
-- **Semantic Chunking:** Uses TreeSitter grammars for supported languages (TypeScript, JavaScript, Python, Go, Rust, C/C++, Java, C#, Ruby, PHP, JSON, YAML, Kotlin, Swift, Dart).
+- **Semantic Chunking:** Uses TreeSitter grammars for supported languages (TypeScript, JavaScript, Python, Go, Rust, C/C++, Java, C#, Ruby, PHP, Swift, Kotlin, JSON).
 
 **Options:**
 
@@ -272,7 +272,7 @@ class AuthService {
 - `osgrep skeleton "query"`: Search for query and skeletonize top matches.
 
 **Supported Languages:**
-TypeScript, JavaScript, Python, Go, Rust, Java, C#, C++, C, Ruby, PHP.
+TypeScript, JavaScript, Python, Go, Rust, Java, C#, C++, C, Ruby, PHP, Swift, Kotlin.
 
 
 ### `osgrep doctor`
