@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TreeSitterChunker } from "../src/lib/index/chunker";
 
-const GRAMMARS_DIR = path.join(os.homedir(), ".osgrep", "grammars");
+const GRAMMARS_DIR = path.join(os.homedir(), ".gmax", "grammars");
 const hasSwiftGrammar = fs.existsSync(
   path.join(GRAMMARS_DIR, "tree-sitter-swift.wasm"),
 );

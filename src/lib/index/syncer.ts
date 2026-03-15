@@ -95,7 +95,7 @@ export async function initialSync(
 
   try {
     if (!dryRun) {
-      lock = await acquireWriterLockWithRetry(paths.osgrepDir);
+      lock = await acquireWriterLockWithRetry(paths.dataDir);
       // Open MetaCache only after lock is acquired
       metaCache = new MetaCache(paths.lmdbPath);
     } else {
@@ -237,7 +237,7 @@ export async function initialSync(
     };
 
     for await (const relPath of walk(paths.root, {
-      additionalPatterns: ["**/.git/**", "**/.osgrep/**"], // exclude .git and .osgrep explicitly if walker doesn't
+      additionalPatterns: ["**/.git/**", "**/.gmax/**"], // exclude .git and .gmax explicitly if walker doesn't
     })) {
       if (signal?.aborted) {
         shouldSkipCleanup = true;

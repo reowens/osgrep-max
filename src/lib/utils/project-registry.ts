@@ -2,7 +2,7 @@
  * Global project registry — tracks all indexed projects for
  * cross-project search and dimension compatibility checking.
  *
- * Stored in ~/.osgrep/projects.json
+ * Stored in ~/.gmax/projects.json
  */
 
 import * as fs from "node:fs";

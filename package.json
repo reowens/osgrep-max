@@ -12,6 +12,7 @@
   },
   "main": "index.js",
   "bin": {
+    "gmax": "dist/index.js",
     "osgrep": "dist/index.js"
   },
   "scripts": {

@@ -2,7 +2,7 @@
  * Index configuration — tracks which models built the current index.
  * Prevents searching with incompatible vectors after a model swap.
  *
- * Also stores user preferences from `osgrep setup` (embed mode, MLX model).
+ * Also stores user preferences from `gmax setup` (embed mode, MLX model).
  */
 
 import * as fs from "node:fs";
@@ -15,7 +15,7 @@ import {
 } from "../../config";
 
 export interface IndexConfig {
-  // User preferences (set by `osgrep setup`)
+  // User preferences (set by `gmax setup`)
   embedMode?: "cpu" | "gpu";
   mlxModel?: string;
   modelTier?: string; // "small" | "standard"
@@ -105,7 +105,7 @@ export function writeIndexConfig(
 
 /**
  * Write only user preferences without touching model identity fields.
- * Used by `osgrep setup` before any indexing has happened.
+ * Used by `gmax setup` before any indexing has happened.
  */
 export function writeSetupConfig(
   configPath: string,

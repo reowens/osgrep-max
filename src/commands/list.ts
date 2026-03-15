@@ -88,7 +88,7 @@ async function showCurrentProject(): Promise<void> {
   ];
 
   console.log(`\n${style.bold("Project")}: ${style.green(projectRoot)}`);
-  console.log(`${style.dim("Data directory")}: ${paths.osgrepDir}\n`);
+  console.log(`${style.dim("Data directory")}: ${paths.dataDir}\n`);
 
   const config = readIndexConfig(paths.configPath);
   if (config) {

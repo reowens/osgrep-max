@@ -247,7 +247,7 @@ export class TreeSitterChunker {
     const wasmPath = path.join(GRAMMARS_DIR, `tree-sitter-${lang}.wasm`);
     if (!fs.existsSync(wasmPath)) {
       console.warn(
-        `⚠️  Missing grammar for ${lang}. Run 'osgrep setup' to download it. Using fallback chunking.`,
+        `⚠️  Missing grammar for ${lang}. Run 'gmax setup' to download it. Using fallback chunking.`,
       );
       this.languages.set(lang, null);
       return null;

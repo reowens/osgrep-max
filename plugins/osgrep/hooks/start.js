@@ -14,8 +14,8 @@ function readPayload() {
 }
 
 function isServerRunning(cwd) {
-  // Read the global server registry (matches how osgrep serve registers)
-  const registryPath = _path.join(os.homedir(), ".osgrep", "servers.json");
+  // Read the global server registry (matches how gmax serve registers)
+  const registryPath = _path.join(os.homedir(), ".gmax", "servers.json");
   try {
     const servers = JSON.parse(fs.readFileSync(registryPath, "utf-8"));
     const match = servers.find((s) => s.projectRoot === cwd);
@@ -34,10 +34,13 @@ function isMlxRunning() {
       (res) => {
         res.resume();
         resolve(res.statusCode === 200);
-      }
+      },
     );
     req.on("error", () => resolve(false));
-    req.on("timeout", () => { req.destroy(); resolve(false); });
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
   });
 }
 
@@ -64,7 +67,7 @@ async function main() {
   const payload = readPayload();
   const cwd = payload.cwd || process.cwd();
 
-  // Check if osgrep serve is running (read-only — MCP server owns daemon lifecycle)
+  // Check if gmax serve is running (read-only — MCP server owns daemon lifecycle)
   const daemonUp = isServerRunning(cwd);
 
   // Start MLX embed server if not running (set OSGREP_EMBED_MODE=cpu to skip)
@@ -80,8 +83,7 @@ async function main() {
   const response = {
     hookSpecificOutput: {
       hookEventName: "SessionStart",
-      additionalContext:
-        `osgrep serve ${status}; prefer \`osgrep "<complete question>"\` over grep (plain output is agent-friendly).`,
+      additionalContext: `gmax serve ${status}; prefer \`gmax "<complete question>"\` over grep (plain output is agent-friendly).`,
     },
   };
   process.stdout.write(JSON.stringify(response));

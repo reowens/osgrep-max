@@ -7,7 +7,7 @@ const registryModulePath = "../src/lib/utils/server-registry";
 
 async function loadRegistry(tempHome: string) {
   const config = await import("../src/config");
-  const globalRoot = path.join(tempHome, ".osgrep");
+  const globalRoot = path.join(tempHome, ".gmax");
   (config.PATHS as any).globalRoot = globalRoot;
   (config.PATHS as any).models = path.join(globalRoot, "models");
   (config.PATHS as any).grammars = path.join(globalRoot, "grammars");
@@ -19,9 +19,7 @@ describe("Server Registry", () => {
   let tempHome: string;
 
   beforeEach(async () => {
-    tempHome = await fs.mkdtemp(
-      path.join(os.tmpdir(), "osgrep-registry-test-"),
-    );
+    tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "gmax-registry-test-"));
     process.env.HOME = tempHome;
   });
 

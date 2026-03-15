@@ -83,7 +83,7 @@ export class VectorDB {
       throw new Error(
         `[vector-db] schema missing fields (${missing.join(
           ", ",
-        )}). Please run "osgrep index --reset" to rebuild the index.`,
+        )}). Please run "gmax index --reset" to rebuild the index.`,
       );
     }
   }
@@ -263,7 +263,7 @@ export class VectorDB {
         throw new Error(
           `[vector-db] schema mismatch detected (fields: ${schemaFields.join(
             ", ",
-          )}). Please run "osgrep index --reset" to rebuild the index.`,
+          )}). Please run "gmax index --reset" to rebuild the index.`,
         );
       }
       throw err;

@@ -114,8 +114,6 @@ export function formatSkeletonHeader(
   tokenEstimate: number,
   langId?: string,
 ): string {
-  const prefix = langId
-    ? getCommentPrefix(getCommentStyle(langId))
-    : "//";
+  const prefix = langId ? getCommentPrefix(getCommentStyle(langId)) : "//";
   return `${prefix} ${filePath} (skeleton, ~${tokenEstimate} tokens)`;
 }

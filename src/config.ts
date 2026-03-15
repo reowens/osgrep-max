@@ -78,7 +78,7 @@ export const MAX_WORKER_MEMORY_MB = Number.parseInt(
 );
 
 const HOME = os.homedir();
-const GLOBAL_ROOT = path.join(HOME, ".osgrep");
+const GLOBAL_ROOT = path.join(HOME, ".gmax");
 
 export const PATHS = {
   globalRoot: GLOBAL_ROOT,

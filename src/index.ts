@@ -31,17 +31,13 @@ program
     process.env.OSGREP_STORE || undefined,
   );
 
-const legacyDataPath = path.join(
-  require("node:os").homedir(),
-  ".osgrep",
-  "data",
-);
+const legacyDataPath = path.join(require("node:os").homedir(), ".gmax", "data");
 const isIndexCommand = process.argv.some((arg) => arg === "index");
 if (isIndexCommand && fs.existsSync(legacyDataPath)) {
-  console.log("⚠️  Legacy global database detected at ~/.osgrep/data.");
-  console.log("   osgrep now uses per-project .osgrep/ directories.");
+  console.log("⚠️  Legacy global database detected at ~/.gmax/data.");
+  console.log("   gmax now uses per-project .gmax/ directories.");
   console.log(
-    "   Run 'osgrep index' in your project root to create a new index.",
+    "   Run 'gmax index' in your project root to create a new index.",
   );
 }
 

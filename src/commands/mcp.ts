@@ -12,14 +12,8 @@ import { GraphBuilder } from "../lib/graph/graph-builder";
 import { getStoredSkeleton } from "../lib/skeleton/retriever";
 import { Skeletonizer } from "../lib/skeleton/skeletonizer";
 import { VectorDB } from "../lib/store/vector-db";
-import {
-  escapeSqlString,
-  normalizePath,
-} from "../lib/utils/filter-builder";
-import {
-  ensureProjectPaths,
-  findProjectRoot,
-} from "../lib/utils/project-root";
+import { escapeSqlString, normalizePath } from "../lib/utils/filter-builder";
+import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 import {
   getServerForProject,
   isProcessRunning,
@@ -39,7 +33,8 @@ const TOOLS = [
       properties: {
         query: {
           type: "string",
-          description: "Natural language search query. Be specific — more words give better results.",
+          description:
+            "Natural language search query. Be specific — more words give better results.",
         },
         limit: {
           type: "number",
@@ -47,15 +42,18 @@ const TOOLS = [
         },
         path: {
           type: "string",
-          description: "Restrict search to files under this path prefix (e.g. 'src/auth/')",
+          description:
+            "Restrict search to files under this path prefix (e.g. 'src/auth/')",
         },
         min_score: {
           type: "number",
-          description: "Minimum relevance score (0-1). Results below this threshold are filtered out. Default: 0 (no filtering)",
+          description:
+            "Minimum relevance score (0-1). Results below this threshold are filtered out. Default: 0 (no filtering)",
         },
         max_per_file: {
           type: "number",
-          description: "Max results per file (default: no cap). Useful to get diversity across files.",
+          description:
+            "Max results per file (default: no cap). Useful to get diversity across files.",
         },
       },
       required: ["query"],
@@ -70,7 +68,8 @@ const TOOLS = [
       properties: {
         target: {
           type: "string",
-          description: "File path relative to project root (e.g. 'src/services/booking.ts')",
+          description:
+            "File path relative to project root (e.g. 'src/services/booking.ts')",
         },
       },
       required: ["target"],
@@ -85,7 +84,8 @@ const TOOLS = [
       properties: {
         symbol: {
           type: "string",
-          description: "The function, method, or class name to trace (e.g. 'handleAuth')",
+          description:
+            "The function, method, or class name to trace (e.g. 'handleAuth')",
         },
       },
       required: ["symbol"],
@@ -100,7 +100,8 @@ const TOOLS = [
       properties: {
         pattern: {
           type: "string",
-          description: "Filter symbols by name (case-insensitive substring match)",
+          description:
+            "Filter symbols by name (case-insensitive substring match)",
         },
         limit: {
           type: "number",
@@ -116,7 +117,7 @@ const TOOLS = [
   {
     name: "index_status",
     description:
-      "Check the status of the osgrep index and serve daemon. Returns file count, chunk count, embed mode, index age, and whether live watching is active.",
+      "Check the status of the gmax index and serve daemon. Returns file count, chunk count, embed mode, index age, and whether live watching is active.",
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -140,14 +141,14 @@ async function ensureDaemon(projectRoot: string): Promise<boolean> {
   }
 
   console.log("[MCP] Starting serve daemon...");
-  const child = spawn("osgrep", ["serve", "-b"], {
+  const child = spawn("gmax", ["serve", "-b"], {
     cwd: projectRoot,
     detached: true,
     stdio: "ignore",
   });
   child.unref();
 
-  // Poll for readiness — daemon registers in ~/.osgrep/servers.json once listening
+  // Poll for readiness — daemon registers in ~/.gmax/servers.json once listening
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const server = getServerForProject(projectRoot);
@@ -198,7 +199,7 @@ export function err(text: string): ToolResult {
 // ---------------------------------------------------------------------------
 
 export const mcp = new Command("mcp")
-  .description("Start MCP server for osgrep")
+  .description("Start MCP server for gmax")
   .action(async (_optsArg, _cmd) => {
     // --- Lifecycle ---
 
@@ -207,7 +208,9 @@ export const mcp = new Command("mcp")
 
     const cleanup = async () => {
       if (_vectorDb) {
-        try { await _vectorDb.close(); } catch {}
+        try {
+          await _vectorDb.close();
+        } catch {}
         _vectorDb = null;
       }
     };
@@ -278,7 +281,9 @@ export const mcp = new Command("mcp")
       return _daemonReady;
     }
 
-    async function handleSemanticSearch(args: Record<string, unknown>): Promise<ToolResult> {
+    async function handleSemanticSearch(
+      args: Record<string, unknown>,
+    ): Promise<ToolResult> {
       const query = String(args.query || "");
       if (!query) return err("Missing required parameter: query");
 
@@ -286,12 +291,14 @@ export const mcp = new Command("mcp")
       const searchPath = typeof args.path === "string" ? args.path : undefined;
 
       if (!(await ensureDaemonRunning())) {
-        return err("Search daemon failed to start. Run 'osgrep serve -b' manually.");
+        return err(
+          "Search daemon failed to start. Run 'gmax serve -b' manually.",
+        );
       }
 
       const server = getServerForProject(projectRoot);
       if (!server || !isProcessRunning(server.pid)) {
-        return err("Search daemon not running. Run 'osgrep serve -b' manually.");
+        return err("Search daemon not running. Run 'gmax serve -b' manually.");
       }
 
       try {
@@ -313,8 +320,10 @@ export const mcp = new Command("mcp")
           return ok("No matches found.");
         }
 
-        const minScore = typeof args.min_score === "number" ? args.min_score : 0;
-        const maxPerFile = typeof args.max_per_file === "number" ? args.max_per_file : 0;
+        const minScore =
+          typeof args.min_score === "number" ? args.min_score : 0;
+        const maxPerFile =
+          typeof args.max_per_file === "number" ? args.max_per_file : 0;
 
         let compact = results.map((r: any) => ({
           path: r.metadata?.path ?? r.path ?? "",
@@ -348,7 +357,9 @@ export const mcp = new Command("mcp")
       }
     }
 
-    async function handleCodeSkeleton(args: Record<string, unknown>): Promise<ToolResult> {
+    async function handleCodeSkeleton(
+      args: Record<string, unknown>,
+    ): Promise<ToolResult> {
       const target = String(args.target || "");
       if (!target) return err("Missing required parameter: target");
 
@@ -395,7 +406,9 @@ export const mcp = new Command("mcp")
       }
     }
 
-    async function handleTraceCalls(args: Record<string, unknown>): Promise<ToolResult> {
+    async function handleTraceCalls(
+      args: Record<string, unknown>,
+    ): Promise<ToolResult> {
       const symbol = String(args.symbol || "");
       if (!symbol) return err("Missing required parameter: symbol");
 
@@ -446,8 +459,11 @@ export const mcp = new Command("mcp")
       }
     }
 
-    async function handleListSymbols(args: Record<string, unknown>): Promise<ToolResult> {
-      const pattern = typeof args.pattern === "string" ? args.pattern : undefined;
+    async function handleListSymbols(
+      args: Record<string, unknown>,
+    ): Promise<ToolResult> {
+      const pattern =
+        typeof args.pattern === "string" ? args.pattern : undefined;
       const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
       const pathPrefix = typeof args.path === "string" ? args.path : undefined;
 
@@ -469,7 +485,10 @@ export const mcp = new Command("mcp")
 
         const rows = await query.toArray();
 
-        const map = new Map<string, { symbol: string; count: number; path: string; line: number }>();
+        const map = new Map<
+          string,
+          { symbol: string; count: number; path: string; line: number }
+        >();
         for (const row of rows) {
           const defs = toStringArray((row as any).defined_symbols);
           const rowPath = String((row as any).path || "");
@@ -482,7 +501,12 @@ export const mcp = new Command("mcp")
             if (existing) {
               existing.count += 1;
             } else {
-              map.set(sym, { symbol: sym, count: 1, path: rowPath, line: Math.max(1, line + 1) });
+              map.set(sym, {
+                symbol: sym,
+                count: 1,
+                path: rowPath,
+                line: Math.max(1, line + 1),
+              });
             }
           }
         }
@@ -495,7 +519,7 @@ export const mcp = new Command("mcp")
           .slice(0, limit);
 
         if (entries.length === 0) {
-          return ok("No symbols found. Run 'osgrep index' to build the index.");
+          return ok("No symbols found. Run 'gmax index' to build the index.");
         }
 
         return ok(JSON.stringify(entries, null, 2));
@@ -511,16 +535,22 @@ export const mcp = new Command("mcp")
       const server = getServerForProject(projectRoot);
       if (!server || !isProcessRunning(server.pid)) {
         // Fall back to config file
-        const configPath = path.join(projectRoot, ".osgrep", "config.json");
+        const configPath = path.join(projectRoot, ".gmax", "config.json");
         try {
           const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-          return ok(JSON.stringify({
-            daemon: "stopped",
-            embedMode: config.embedMode ?? "unknown",
-            model: config.embedModel ?? config.mlxModel ?? null,
-            vectorDim: config.vectorDim ?? null,
-            indexedAt: config.indexedAt ?? null,
-          }, null, 2));
+          return ok(
+            JSON.stringify(
+              {
+                daemon: "stopped",
+                embedMode: config.embedMode ?? "unknown",
+                model: config.embedModel ?? config.mlxModel ?? null,
+                vectorDim: config.vectorDim ?? null,
+                indexedAt: config.indexedAt ?? null,
+              },
+              null,
+              2,
+            ),
+          );
         } catch {
           return ok(JSON.stringify({ daemon: "stopped", indexed: false }));
         }
@@ -534,12 +564,18 @@ export const mcp = new Command("mcp")
           return err(`Stats request failed (${response.status})`);
         }
         const stats = await response.json();
-        return ok(JSON.stringify({
-          daemon: "running",
-          pid: server.pid,
-          port: server.port,
-          ...stats as Record<string, unknown>,
-        }, null, 2));
+        return ok(
+          JSON.stringify(
+            {
+              daemon: "running",
+              pid: server.pid,
+              port: server.port,
+              ...(stats as Record<string, unknown>),
+            },
+            null,
+            2,
+          ),
+        );
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         return err(`Failed to get status: ${msg}`);
@@ -551,7 +587,7 @@ export const mcp = new Command("mcp")
     const transport = new StdioServerTransport();
     const server = new Server(
       {
-        name: "osgrep",
+        name: "gmax",
         version: JSON.parse(
           fs.readFileSync(path.join(__dirname, "../../package.json"), {
             encoding: "utf-8",

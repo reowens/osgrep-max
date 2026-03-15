@@ -156,7 +156,7 @@ export const skeleton = new Command("skeleton")
         if (!filePath) {
           console.error(`Symbol not found in index: ${target}`);
           console.error(
-            "Try running 'osgrep index' first or use a search query.",
+            "Try running 'gmax index' first or use a search query.",
           );
           process.exitCode = 1;
           return;

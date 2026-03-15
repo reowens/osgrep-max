@@ -20,7 +20,7 @@ CLAUDE.md
 .DS_Store
 latest_review.md
 benchmarks/*.log
-.osgrep
+.gmax
 TODO.md
 AGENTS.md
 docs/

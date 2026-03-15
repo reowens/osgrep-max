@@ -38,7 +38,7 @@ export async function* walk(
   rootDir: string,
   options: WalkOptions = {},
 ): AsyncGenerator<string> {
-  const ignoreFiles = options.ignoreFiles || [".gitignore", ".osgrepignore"];
+  const ignoreFiles = options.ignoreFiles || [".gitignore", ".gmaxignore"];
   const rootParams = ignore().add(DEFAULT_IGNORE_PATTERNS);
   if (options.additionalPatterns) {
     rootParams.add(options.additionalPatterns);

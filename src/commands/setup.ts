@@ -17,7 +17,7 @@ import { ensureProjectPaths } from "../lib/utils/project-root";
 export const setup = new Command("setup")
   .description("Interactive setup: download models, choose embedding mode")
   .action(async () => {
-    p.intro("grepmax setup");
+    p.intro("gmax setup");
 
     // Step 1: Download ONNX models + grammars (existing behavior)
     try {
@@ -142,7 +142,7 @@ export const setup = new Command("setup")
         );
       } else if (modeChanged) {
         p.log.warn(
-          "Embedding mode changed. Run `osgrep serve` to apply the new settings.",
+          "Embedding mode changed. Run `gmax serve` to apply the new settings.",
         );
       }
     }
