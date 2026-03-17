@@ -25,7 +25,7 @@ export const summarize = new Command("summarize")
     const { spinner } = createIndexingSpinner("", "Summarizing...");
 
     try {
-      const count = await generateSummaries(
+      const { summarized, remaining } = await generateSummaries(
         vectorDb,
         rootPrefix,
         (done, total) => {
@@ -33,8 +33,9 @@ export const summarize = new Command("summarize")
         },
       );
 
-      if (count > 0) {
-        spinner.succeed(`Summarized ${count} chunks`);
+      if (summarized > 0) {
+        const remainMsg = remaining > 0 ? ` (${remaining}+ remaining — run again)` : "";
+        spinner.succeed(`Summarized ${summarized} chunks${remainMsg}`);
       } else {
         spinner.succeed("All chunks already have summaries (or summarizer unavailable)");
       }
