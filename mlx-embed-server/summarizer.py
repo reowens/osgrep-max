@@ -11,6 +11,7 @@ endpoints run on the event loop thread, avoiding Metal thread-safety crashes.
 import asyncio
 import logging
 import os
+import re
 import signal
 import socket
 import time
@@ -38,7 +39,7 @@ MODEL_ID = os.environ.get(
 )
 PORT = int(os.environ.get("MLX_SUMMARY_PORT", "8101"))
 IDLE_TIMEOUT_S = int(os.environ.get("MLX_SUMMARY_IDLE_TIMEOUT", "1800"))  # 30 min
-MAX_TOKENS = 100  # summaries should be one line
+MAX_TOKENS = 40  # summaries are ~20 tokens, one line
 
 model = None
 tokenizer = None
@@ -48,7 +49,7 @@ _mlx_lock = asyncio.Lock()
 
 SYSTEM_PROMPT = """You are a code summarizer. Given a code chunk, produce exactly one line describing what it does.
 Be specific about business logic, services, and side effects. Do not describe syntax.
-Do not use phrases like "This function" or "This code". Start with a verb."""
+Do not use phrases like "This function" or "This code". Start with a verb. /no_think"""
 
 def build_prompt(code: str, language: str, file: str, symbols: list[str] | None = None) -> str:
     parts = [f"Language: {language}", f"File: {file}"]
@@ -79,8 +80,12 @@ def summarize_chunk(code: str, language: str, file: str, symbols: list[str] | No
         max_tokens=MAX_TOKENS,
         verbose=False,
     )
+    # Strip thinking tokens if present
+    text = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
+    if not text:
+        text = response.strip()
     # Take first line only, strip whitespace
-    summary = response.strip().split("\n")[0].strip()
+    summary = text.split("\n")[0].strip()
     # Remove common prefixes the model might add
     for prefix in ["Summary: ", "summary: ", "- "]:
         if summary.startswith(prefix):

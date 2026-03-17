@@ -37,21 +37,23 @@ export async function generateSummaries(
   db: VectorDB,
   pathPrefix: string,
   onProgress?: (count: number, total: number) => void,
-): Promise<number> {
+  maxChunks?: number,
+): Promise<{ summarized: number; remaining: number }> {
   let summarizeChunks: typeof import("../workers/summarize/llm-client").summarizeChunks;
   try {
     const mod = await import("../workers/summarize/llm-client");
     summarizeChunks = mod.summarizeChunks;
   } catch {
-    return 0;
+    return { summarized: 0, remaining: 0 };
   }
 
   // Quick availability check
   const test = await summarizeChunks([
     { code: "test", language: "ts", file: "test" },
   ]);
-  if (!test) return 0;
+  if (!test) return { summarized: 0, remaining: 0 };
 
+  const queryLimit = maxChunks ?? 50000;
   const table = await db.ensureTable();
   const rows = await table
     .query()
@@ -59,10 +61,10 @@ export async function generateSummaries(
     .where(
       `path LIKE '${pathPrefix}%' AND (summary IS NULL OR summary = '')`,
     )
-    .limit(50000)
+    .limit(queryLimit)
     .toArray();
 
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) return { summarized: 0, remaining: 0 };
 
   let summarized = 0;
   const BATCH_SIZE = 5;
@@ -104,7 +106,11 @@ export async function generateSummaries(
     onProgress?.(summarized, rows.length);
   }
 
-  return summarized;
+  // Estimate remaining (rows.length was capped by queryLimit)
+  const remaining = rows.length === queryLimit
+    ? queryLimit - summarized // at least this many more
+    : 0;
+  return { summarized, remaining };
 }
 
 async function flushBatch(
@@ -490,31 +496,6 @@ export async function initialSync(
       stale.forEach((p) => {
         metaCache!.delete(p);
       });
-    }
-
-    // --- Summary post-processing (sequential, single process) ---
-    if (!dryRun && indexed > 0) {
-      const sumTimer = timer("index", "Summarize");
-      onProgress?.({
-        processed,
-        indexed,
-        total,
-        filePath: "Generating summaries...",
-      });
-      const summarized = await generateSummaries(
-        vectorDb,
-        rootPrefix,
-        (count, chunkTotal) => {
-          onProgress?.({
-            processed: count,
-            indexed,
-            total: chunkTotal,
-            filePath: `Summarizing... (${count}/${chunkTotal})`,
-          });
-        },
-      );
-      sumTimer();
-      log("index", `Summarize: ${summarized} chunks`);
     }
 
     syncTimer();
