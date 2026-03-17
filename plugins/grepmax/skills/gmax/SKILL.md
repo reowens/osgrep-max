@@ -1,7 +1,7 @@
 ---
 name: gmax
 description: Semantic code search. Use alongside grep - grep for exact strings, gmax for concepts.
-allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__search_all, mcp__grepmax__code_skeleton, mcp__grepmax__trace_calls, mcp__grepmax__list_symbols, mcp__grepmax__index_status, Bash(gmax:*), Read"
+allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__search_all, mcp__grepmax__code_skeleton, mcp__grepmax__trace_calls, mcp__grepmax__list_symbols, mcp__grepmax__index_status, mcp__grepmax__summarize_directory, Bash(gmax:*), Read"
 ---
 
 ## What gmax does
@@ -66,6 +66,10 @@ List indexed symbols with definition locations.
 
 ### index_status
 Check centralized index health — chunks, files, indexed directories, model info.
+
+### summarize_directory
+Generate LLM summaries for indexed code in a directory. Summaries are stored and returned in search results. Run after indexing a new directory.
+- `path` (optional): Directory to summarize. Defaults to project root.
 
 ## Workflow
 

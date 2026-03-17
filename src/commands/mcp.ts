@@ -11,7 +11,7 @@ import { Command } from "commander";
 import { PATHS } from "../config";
 import { GraphBuilder } from "../lib/graph/graph-builder";
 import { readIndexConfig } from "../lib/index/index-config";
-import { initialSync } from "../lib/index/syncer";
+import { generateSummaries, initialSync } from "../lib/index/syncer";
 import { Searcher } from "../lib/search/searcher";
 import { getStoredSkeleton } from "../lib/skeleton/retriever";
 import { Skeletonizer } from "../lib/skeleton/skeletonizer";
@@ -165,6 +165,26 @@ const TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {},
+    },
+  },
+  {
+    name: "summarize_directory",
+    description:
+      "Generate LLM summaries for indexed code in a directory. Run after indexing. Summaries are stored and returned in search results. Requires the summarizer server on port 8101.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        path: {
+          type: "string",
+          description:
+            "Directory to summarize (absolute or relative). Defaults to current project root.",
+        },
+        limit: {
+          type: "number",
+          description:
+            "Max chunks to summarize per call (default 200, max 5000). Run again to continue.",
+        },
+      },
     },
   },
 ];
@@ -691,6 +711,47 @@ export const mcp = new Command("mcp")
       }
     }
 
+    async function handleSummarizeDirectory(
+      args: Record<string, unknown>,
+    ): Promise<ToolResult> {
+      const dir =
+        typeof args.path === "string"
+          ? path.resolve(args.path)
+          : projectRoot;
+      const prefix = dir.endsWith("/") ? dir : `${dir}/`;
+      const limit = Math.min(
+        Math.max(Number(args.limit) || 200, 1),
+        5000,
+      );
+
+      try {
+        const db = getVectorDb();
+        const { summarized, remaining } = await generateSummaries(
+          db,
+          prefix,
+          (done, total) => {
+            console.log(`[summarize] ${done}/${total} chunks`);
+          },
+          limit,
+        );
+
+        if (summarized === 0) {
+          return ok(
+            "No chunks to summarize (all have summaries or summarizer unavailable)",
+          );
+        }
+        const remainMsg = remaining > 0
+          ? ` (${remaining}+ remaining — run again to continue)`
+          : "";
+        return ok(
+          `Summarized ${summarized} chunks in ${path.basename(dir)}/${remainMsg}`,
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return err(`Summarization failed: ${msg}`);
+      }
+    }
+
     // --- MCP server setup ---
 
     const transport = new StdioServerTransport();
@@ -731,6 +792,8 @@ export const mcp = new Command("mcp")
           return handleListSymbols(toolArgs);
         case "index_status":
           return handleIndexStatus();
+        case "summarize_directory":
+          return handleSummarizeDirectory(toolArgs);
         default:
           return err(`Unknown tool: ${name}`);
       }
