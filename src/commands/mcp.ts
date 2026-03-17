@@ -179,6 +179,11 @@ const TOOLS = [
           description:
             "Directory to summarize (absolute or relative). Defaults to current project root.",
         },
+        limit: {
+          type: "number",
+          description:
+            "Max chunks to summarize per call (default 200, max 5000). Run again to continue.",
+        },
       },
     },
   },
@@ -714,19 +719,33 @@ export const mcp = new Command("mcp")
           ? path.resolve(args.path)
           : projectRoot;
       const prefix = dir.endsWith("/") ? dir : `${dir}/`;
+      const limit = Math.min(
+        Math.max(Number(args.limit) || 200, 1),
+        5000,
+      );
 
       try {
         const db = getVectorDb();
-        const count = await generateSummaries(db, prefix, (done, total) => {
-          console.log(`[summarize] ${done}/${total} chunks`);
-        });
+        const { summarized, remaining } = await generateSummaries(
+          db,
+          prefix,
+          (done, total) => {
+            console.log(`[summarize] ${done}/${total} chunks`);
+          },
+          limit,
+        );
 
-        if (count === 0) {
+        if (summarized === 0) {
           return ok(
             "No chunks to summarize (all have summaries or summarizer unavailable)",
           );
         }
-        return ok(`Summarized ${count} chunks in ${path.basename(dir)}/`);
+        const remainMsg = remaining > 0
+          ? ` (${remaining}+ remaining — run again to continue)`
+          : "";
+        return ok(
+          `Summarized ${summarized} chunks in ${path.basename(dir)}/${remainMsg}`,
+        );
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         return err(`Summarization failed: ${msg}`);

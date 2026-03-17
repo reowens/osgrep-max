@@ -11,6 +11,7 @@ endpoints run on the event loop thread, avoiding Metal thread-safety crashes.
 import asyncio
 import logging
 import os
+import re
 import signal
 import socket
 import time
@@ -80,7 +81,6 @@ def summarize_chunk(code: str, language: str, file: str, symbols: list[str] | No
         verbose=False,
     )
     # Strip thinking tokens if present
-    import re
     text = re.sub(r"<think>.*?</think>", "", response, flags=re.DOTALL).strip()
     if not text:
         text = response.strip()
