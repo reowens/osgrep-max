@@ -67,6 +67,10 @@ List indexed symbols with definition locations.
 ### index_status
 Check centralized index health — chunks, files, indexed directories, model info.
 
+### summarize_directory
+Generate LLM summaries for indexed code in a directory. Summaries are stored and returned in search results. Run after indexing a new directory.
+- `path` (optional): Directory to summarize. Defaults to project root.
+
 ## Workflow
 
 1. **Search** — `semantic_search` to find relevant code (pointers by default)
