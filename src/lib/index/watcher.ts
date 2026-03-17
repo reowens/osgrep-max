@@ -81,6 +81,8 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
     const start = Date.now();
     let reindexed = 0;
 
+    const changedIds: string[] = [];
+
     try {
       const lock = await acquireWriterLockWithRetry(dataDir, {
         maxRetries: 3,
@@ -93,8 +95,6 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
         const vectors: VectorRecord[] = [];
         const metaUpdates = new Map<string, MetaEntry>();
         const metaDeletes: string[] = [];
-
-        const changedIds: string[] = [];
 
         for (const [absPath, event] of batch) {
           if (event === "unlink") {
@@ -173,40 +173,41 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
           metaCache.delete(p);
         }
 
-        // Summarize new/changed chunks (sequential, no GPU contention)
-        if (changedIds.length > 0) {
-          try {
-            const table = await vectorDb.ensureTable();
-            for (const id of changedIds) {
-              const escaped = id.replace(/'/g, "''");
-              const rows = await table
-                .query()
-                .select(["id", "path", "content"])
-                .where(`id = '${escaped}'`)
-                .limit(1)
-                .toArray();
-              if (rows.length === 0) continue;
-              const r = rows[0] as any;
-              const lang =
-                path.extname(String(r.path || "")).replace(/^\./, "") ||
-                "unknown";
-              const summaries = await summarizeChunks([
-                {
-                  code: String(r.content || ""),
-                  language: lang,
-                  file: String(r.path || ""),
-                },
-              ]);
-              if (summaries?.[0]) {
-                await vectorDb.updateRows([id], "summary", [summaries[0]]);
-              }
-            }
-          } catch {
-            // Summarizer unavailable — skip silently
-          }
-        }
       } finally {
         await lock.release();
+      }
+
+      // Summarize new/changed chunks outside the lock (sequential, no GPU contention)
+      if (changedIds.length > 0) {
+        try {
+          const table = await vectorDb.ensureTable();
+          for (const id of changedIds) {
+            const escaped = id.replace(/'/g, "''");
+            const rows = await table
+              .query()
+              .select(["id", "path", "content"])
+              .where(`id = '${escaped}'`)
+              .limit(1)
+              .toArray();
+            if (rows.length === 0) continue;
+            const r = rows[0] as any;
+            const lang =
+              path.extname(String(r.path || "")).replace(/^\./, "") ||
+              "unknown";
+            const summaries = await summarizeChunks([
+              {
+                code: String(r.content || ""),
+                language: lang,
+                file: String(r.path || ""),
+              },
+            ]);
+            if (summaries?.[0]) {
+              await vectorDb.updateRows([id], "summary", [summaries[0]]);
+            }
+          }
+        } catch {
+          // Summarizer unavailable — skip silently
+        }
       }
 
       if (reindexed > 0) {
