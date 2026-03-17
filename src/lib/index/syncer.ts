@@ -492,31 +492,6 @@ export async function initialSync(
       });
     }
 
-    // --- Summary post-processing (sequential, single process) ---
-    if (!dryRun && indexed > 0) {
-      const sumTimer = timer("index", "Summarize");
-      onProgress?.({
-        processed,
-        indexed,
-        total,
-        filePath: "Generating summaries...",
-      });
-      const summarized = await generateSummaries(
-        vectorDb,
-        rootPrefix,
-        (count, chunkTotal) => {
-          onProgress?.({
-            processed: count,
-            indexed,
-            total: chunkTotal,
-            filePath: `Summarizing... (${count}/${chunkTotal})`,
-          });
-        },
-      );
-      sumTimer();
-      log("index", `Summarize: ${summarized} chunks`);
-    }
-
     syncTimer();
 
     // Write model config so future runs can detect model changes
