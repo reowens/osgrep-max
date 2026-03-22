@@ -120,6 +120,8 @@ export class WorkerPool {
   private destroyPromise: Promise<void> | null = null;
   private readonly modulePath: string;
   private readonly execArgv: string[];
+  private consecutiveRespawns = 0;
+  private static readonly MAX_RESPAWNS = 10;
 
   constructor() {
     const resolved = resolveProcessWorker();
@@ -182,6 +184,13 @@ export class WorkerPool {
     log("pool", `Worker PID:${worker.child.pid} exited (code:${code} signal:${signal})`);
     this.workers = this.workers.filter((w) => w !== worker);
     if (!this.destroyed) {
+      this.consecutiveRespawns++;
+      if (this.consecutiveRespawns > WorkerPool.MAX_RESPAWNS) {
+        console.error(
+          `[pool] Worker respawn limit reached (${WorkerPool.MAX_RESPAWNS}). Not spawning more workers.`,
+        );
+        return;
+      }
       this.spawnWorker();
       this.dispatch();
     }
@@ -220,6 +229,7 @@ export class WorkerPool {
       }
 
       this.completeTask(task, worker);
+      this.consecutiveRespawns = 0;
       this.dispatch();
     };
 

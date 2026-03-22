@@ -1,4 +1,5 @@
 import type { VectorDB } from "../store/vector-db";
+import { escapeSqlString } from "../utils/filter-builder";
 
 export async function getStoredSkeleton(
   db: VectorDB,
@@ -9,7 +10,7 @@ export async function getStoredSkeleton(
     // LanceDB query
     const results = await table
       .query()
-      .where(`path = '${filePath.replace(/'/g, "''")}' AND is_anchor = true`)
+      .where(`path = '${escapeSqlString(filePath)}' AND is_anchor = true`)
       .limit(1)
       .toArray();
 

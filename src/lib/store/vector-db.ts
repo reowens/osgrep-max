@@ -13,6 +13,7 @@ import {
   Utf8,
 } from "apache-arrow";
 import { CONFIG } from "../../config";
+import { escapeSqlString } from "../utils/filter-builder";
 import { log } from "../utils/logger";
 import { registerCleanup } from "../utils/cleanup";
 import type { VectorRecord } from "./types";
@@ -301,7 +302,7 @@ export class VectorDB {
     const rows = await table
       .query()
       .select(["id"])
-      .where(`path LIKE '${prefix.replace(/'/g, "''")}%'`)
+      .where(`path LIKE '${escapeSqlString(prefix)}%'`)
       .limit(1)
       .toArray();
     return rows.length > 0;
@@ -329,7 +330,7 @@ export class VectorDB {
     const batchSize = 500;
     for (let i = 0; i < unique.length; i += batchSize) {
       const slice = unique.slice(i, i + batchSize);
-      const values = slice.map((p) => `'${p.replace(/'/g, "''")}'`).join(",");
+      const values = slice.map((p) => `'${escapeSqlString(p)}'`).join(",");
       await table.delete(`path IN (${values})`);
     }
   }
@@ -342,7 +343,7 @@ export class VectorDB {
     if (!ids.length) return;
     const table = await this.ensureTable();
     for (let i = 0; i < ids.length; i++) {
-      const escaped = ids[i].replace(/'/g, "''");
+      const escaped = escapeSqlString(ids[i]);
       await table.update({
         where: `id = '${escaped}'`,
         values: { [field]: values[i] ?? "" },
@@ -360,12 +361,12 @@ export class VectorDB {
     const batchSize = 500;
     const idExclusion =
       excludeIds.length > 0
-        ? ` AND id NOT IN (${excludeIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",")})`
+        ? ` AND id NOT IN (${excludeIds.map((id) => `'${escapeSqlString(id)}'`).join(",")})`
         : "";
     for (let i = 0; i < unique.length; i += batchSize) {
       const slice = unique.slice(i, i + batchSize);
       const values = slice
-        .map((p) => `'${p.replace(/'/g, "''")}'`)
+        .map((p) => `'${escapeSqlString(p)}'`)
         .join(",");
       await table.delete(`path IN (${values})${idExclusion}`);
     }
@@ -373,8 +374,7 @@ export class VectorDB {
 
   async deletePathsWithPrefix(prefix: string): Promise<void> {
     const table = await this.ensureTable();
-    const escaped = prefix.replace(/'/g, "''");
-    await table.delete(`path LIKE '${escaped}%'`);
+    await table.delete(`path LIKE '${escapeSqlString(prefix)}%'`);
   }
 
   async drop(): Promise<void> {

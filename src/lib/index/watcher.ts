@@ -4,6 +4,7 @@ import { type FSWatcher, watch } from "chokidar";
 import type { MetaCache, MetaEntry } from "../store/meta-cache";
 import type { VectorRecord } from "../store/types";
 import type { VectorDB } from "../store/vector-db";
+import { escapeSqlString } from "../utils/filter-builder";
 import { isIndexableFile } from "../utils/file-utils";
 import { log } from "../utils/logger";
 import { acquireWriterLockWithRetry } from "../utils/lock";
@@ -192,7 +193,7 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
         try {
           const table = await vectorDb.ensureTable();
           for (const id of changedIds) {
-            const escaped = id.replace(/'/g, "''");
+            const escaped = escapeSqlString(id);
             const rows = await table
               .query()
               .select(["id", "path", "content"])

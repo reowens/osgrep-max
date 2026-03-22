@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Command } from "commander";
 import { PATHS } from "../config";
+import { escapeSqlString } from "../lib/utils/filter-builder";
 import { initialSync } from "../lib/index/syncer";
 import { startWatcher } from "../lib/index/watcher";
 import { MetaCache } from "../lib/store/meta-cache";
@@ -91,7 +92,7 @@ export const watch = new Command("watch")
     const indexed = await table
       .query()
       .select(["id"])
-      .where(`path LIKE '${prefix}%'`)
+      .where(`path LIKE '${escapeSqlString(prefix)}%'`)
       .limit(1)
       .toArray();
 

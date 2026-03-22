@@ -363,6 +363,10 @@ export const mcp = new Command("mcp")
               ? path.resolve(args.root)
               : path.resolve(projectRoot);
 
+          if (typeof args.root === "string" && !fs.existsSync(searchRoot)) {
+            return err(`Directory not found: ${args.root}`);
+          }
+
           displayRoot = searchRoot;
           pathPrefix = searchRoot.endsWith("/")
             ? searchRoot
