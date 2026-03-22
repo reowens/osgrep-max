@@ -5,6 +5,7 @@ import { log, debug, timer } from "../utils/logger";
 import { MetaCache, type MetaEntry } from "../store/meta-cache";
 import type { VectorRecord } from "../store/types";
 import { VectorDB } from "../store/vector-db";
+import { escapeSqlString } from "../utils/filter-builder";
 import { isIndexableFile } from "../utils/file-utils";
 import { acquireWriterLockWithRetry, type LockHandle } from "../utils/lock";
 import { registerProject } from "../utils/project-registry";
@@ -59,7 +60,7 @@ export async function generateSummaries(
     .query()
     .select(["id", "path", "content", "defined_symbols"])
     .where(
-      `path LIKE '${pathPrefix}%' AND (summary IS NULL OR summary = '')`,
+      `path LIKE '${escapeSqlString(pathPrefix)}%' AND (summary IS NULL OR summary = '')`,
     )
     .limit(queryLimit)
     .toArray();
