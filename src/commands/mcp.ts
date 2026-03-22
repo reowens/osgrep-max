@@ -232,6 +232,8 @@ export const mcp = new Command("mcp")
     let _searcher: Searcher | null = null;
     let _skeletonizer: Skeletonizer | null = null;
     let _indexReady = false;
+    let _indexing = false;
+    let _indexProgress = "";
 
     const cleanup = async () => {
       if (_vectorDb) {
@@ -310,14 +312,31 @@ export const mcp = new Command("mcp")
         const hasIndex = await db.hasRowsForPath(projectRoot);
 
         if (!hasIndex) {
+          if (_indexing) return; // Already indexing in background
+          _indexing = true;
+          _indexProgress = "starting...";
           console.log("[MCP] No index found, running initial sync...");
-          await initialSync({ projectRoot });
-          console.log("[MCP] Initial sync complete.");
+          initialSync({
+            projectRoot,
+            onProgress: (info) => {
+              _indexProgress = `${info.processed}/${info.total || "?"} files`;
+            },
+          })
+            .then(() => {
+              _indexReady = true;
+              _indexing = false;
+              _indexProgress = "";
+              console.log("[MCP] Initial sync complete.");
+            })
+            .catch((e) => {
+              _indexing = false;
+              _indexProgress = "";
+              console.error("[MCP] Index sync failed:", e);
+            });
         } else {
           console.log("[MCP] Index exists, ready.");
+          _indexReady = true;
         }
-
-        _indexReady = true;
       } catch (e) {
         console.error("[MCP] Index sync failed:", e);
       }
@@ -349,6 +368,12 @@ export const mcp = new Command("mcp")
 
       await ensureIndexReady();
       ensureWatcher();
+
+      if (_indexing) {
+        return ok(
+          `Indexing in progress (${_indexProgress}). Results may be incomplete or empty — try again shortly.`,
+        );
+      }
 
       try {
         const searcher = getSearcher();
@@ -538,6 +563,12 @@ export const mcp = new Command("mcp")
       const symbol = String(args.symbol || "");
       if (!symbol) return err("Missing required parameter: symbol");
 
+      if (_indexing) {
+        return ok(
+          `Indexing in progress (${_indexProgress}). trace_calls requires a complete index — try again shortly.`,
+        );
+      }
+
       try {
         const db = getVectorDb();
         const builder = new GraphBuilder(db);
@@ -589,6 +620,12 @@ export const mcp = new Command("mcp")
         typeof args.pattern === "string" ? args.pattern : undefined;
       const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
       const pathPrefix = typeof args.path === "string" ? args.path : undefined;
+
+      if (_indexing) {
+        return ok(
+          `Indexing in progress (${_indexProgress}). list_symbols requires a complete index — try again shortly.`,
+        );
+      }
 
       try {
         const db = getVectorDb();
@@ -687,6 +724,10 @@ export const mcp = new Command("mcp")
           }
         }
 
+        const indexingLine = _indexing
+          ? `Indexing: in progress (${_indexProgress})`
+          : "";
+
         const lines = [
           `Index: ~/.gmax/lancedb (${stats.chunks} chunks, ${fileCount} files)`,
           `Model: ${globalConfig.embedMode === "gpu" ? (MODEL_TIERS[globalConfig.modelTier]?.mlxModel ?? config?.embedModel ?? "unknown") : (config?.embedModel ?? "unknown")} (${config?.vectorDim ?? "?"}d, ${globalConfig.embedMode})`,
@@ -694,6 +735,7 @@ export const mcp = new Command("mcp")
             ? `Last indexed: ${config.indexedAt}`
             : "",
           watcherLine,
+          indexingLine,
           "",
           "Indexed directories:",
           ...projects.map(
