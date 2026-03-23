@@ -395,6 +395,15 @@ export const search: Command = new CommanderCommand("search")
     "Show code skeleton for matching files instead of snippets",
     false,
   )
+  .option("--root <dir>", "Search a different project directory")
+  .option("--file <name>", "Filter to files matching this name (e.g. 'syncer.ts')")
+  .option("--exclude <prefix>", "Exclude files under this path prefix (e.g. 'tests/')")
+  .option("--lang <ext>", "Filter by file extension (e.g. 'ts', 'py')")
+  .option("--role <role>", "Filter by role: ORCHESTRATION, DEFINITION, IMPLEMENTATION")
+  .option("--symbol", "Append call graph after search results", false)
+  .option("--imports", "Prepend file imports to each result", false)
+  .option("--name <regex>", "Filter results by symbol name regex")
+  .option("-C, --context <n>", "Include N lines before/after each result")
   .argument("<pattern>", "Natural language query (e.g. \"where do we handle auth?\")")
   .argument("[path]", "Restrict search to this path prefix")
   .addHelpText(
@@ -402,9 +411,11 @@ export const search: Command = new CommanderCommand("search")
     `
 Examples:
   gmax "where do we handle authentication?"
-  gmax "database connection pooling" -m 10
-  gmax "error handling" --compact --min-score 0.5
-  gmax "validation logic" --skeleton
+  gmax "auth handler" --role ORCHESTRATION --lang ts --plain
+  gmax "database" --file syncer.ts --plain
+  gmax "VectorDB" --symbol --plain
+  gmax "error handling" -C 5 --imports --plain
+  gmax "handler" --name "handle.*" --exclude tests/
 `,
   )
   .action(async (pattern, exec_path, _options, cmd) => {
@@ -419,6 +430,15 @@ Examples:
       sync: boolean;
       dryRun: boolean;
       skeleton: boolean;
+      root: string;
+      file: string;
+      exclude: string;
+      lang: string;
+      role: string;
+      symbol: boolean;
+      imports: boolean;
+      name: string;
+      context: string;
     } = cmd.optsWithGlobals();
 
     const root = process.cwd();
@@ -611,19 +631,29 @@ Examples:
 
       const searcher = new Searcher(vectorDb);
 
-      // Use absolute path prefix for filtering
+      // Use --root or fall back to project root
+      const effectiveRoot = options.root
+        ? findProjectRoot(path.resolve(options.root)) ?? path.resolve(options.root)
+        : projectRoot;
       const searchPathPrefix = exec_path
         ? path.resolve(exec_path)
-        : projectRoot;
+        : effectiveRoot;
       const pathFilter = searchPathPrefix.endsWith("/")
         ? searchPathPrefix
         : `${searchPathPrefix}/`;
+
+      // Build filters from CLI options
+      const searchFilters: Record<string, string> = {};
+      if (options.file) searchFilters.file = options.file;
+      if (options.exclude) searchFilters.exclude = options.exclude;
+      if (options.lang) searchFilters.language = options.lang;
+      if (options.role) searchFilters.role = options.role;
 
       const searchResult = await searcher.search(
         pattern,
         parseInt(options.m, 10),
         { rerank: true },
-        undefined,
+        Object.keys(searchFilters).length > 0 ? searchFilters : undefined,
         pathFilter,
       );
 
@@ -633,9 +663,24 @@ Examples:
         }
       }
 
-      const filteredData = searchResult.data.filter(
+      let filteredData = searchResult.data.filter(
         (r) => typeof r.score !== "number" || r.score >= minScore,
       );
+
+      // Post-filter by symbol name regex
+      if (options.name) {
+        try {
+          const regex = new RegExp(options.name, "i");
+          filteredData = filteredData.filter((r) => {
+            const defs = Array.isArray(r.defined_symbols)
+              ? r.defined_symbols
+              : [];
+            return defs.some((d: string) => regex.test(d));
+          });
+        } catch {
+          // Invalid regex — skip
+        }
+      }
 
       if (options.skeleton) {
         await outputSkeletons(
@@ -688,6 +733,63 @@ Examples:
           content: options.content,
         });
         console.log(output);
+      }
+
+      // Symbol mode: append call graph
+      if (options.symbol && vectorDb) {
+        try {
+          const { GraphBuilder } = await import(
+            "../lib/graph/graph-builder"
+          );
+          const builder = new GraphBuilder(vectorDb);
+          const graph = await builder.buildGraphMultiHop(pattern, 1);
+          if (graph.center) {
+            const lines: string[] = ["\n--- Call graph ---"];
+            const centerRel = path.relative(
+              effectiveRoot,
+              graph.center.file,
+            );
+            lines.push(
+              `${graph.center.symbol} [${graph.center.role}] ${centerRel}:${graph.center.line + 1}`,
+            );
+            if (graph.importers.length > 0) {
+              const filtered = graph.importers.filter(
+                (p) => p !== graph.center!.file,
+              );
+              if (filtered.length > 0) {
+                lines.push("Imported by:");
+                for (const imp of filtered.slice(0, 10)) {
+                  lines.push(
+                    `  ${path.relative(effectiveRoot, imp)}`,
+                  );
+                }
+              }
+            }
+            if (graph.callerTree.length > 0) {
+              lines.push("Callers:");
+              for (const t of graph.callerTree) {
+                lines.push(
+                  `  <- ${t.node.symbol} ${path.relative(effectiveRoot, t.node.file)}:${t.node.line + 1}`,
+                );
+              }
+            }
+            if (graph.callees.length > 0) {
+              lines.push("Calls:");
+              for (const c of graph.callees.slice(0, 15)) {
+                if (c.file) {
+                  lines.push(
+                    `  -> ${c.symbol} ${path.relative(effectiveRoot, c.file)}:${c.line + 1}`,
+                  );
+                } else {
+                  lines.push(`  -> ${c.symbol} (not indexed)`);
+                }
+              }
+            }
+            console.log(lines.join("\n"));
+          }
+        } catch {
+          // Trace failed — skip silently
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
