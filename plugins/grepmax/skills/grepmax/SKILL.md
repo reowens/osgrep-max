@@ -1,7 +1,7 @@
 ---
 name: grepmax
 description: Semantic code search. Use alongside grep - grep for exact strings, gmax for concepts.
-allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__search_all, mcp__grepmax__code_skeleton, mcp__grepmax__trace_calls, mcp__grepmax__list_symbols, mcp__grepmax__index_status, mcp__grepmax__summarize_directory, Bash(gmax:*), Read"
+allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__search_all, mcp__grepmax__code_skeleton, mcp__grepmax__trace_calls, mcp__grepmax__list_symbols, mcp__grepmax__index_status, mcp__grepmax__summarize_directory, mcp__grepmax__summarize_project, Bash(gmax:*), Read"
 ---
 
 ## What gmax does
@@ -78,6 +78,10 @@ List indexed symbols with definition locations, role, and export status.
 - `path` (optional): Only symbols under this path prefix
 
 Output: `symbolName [ORCH] exported  src/path/file.ts:42`
+
+### summarize_project
+High-level project overview — languages, directory structure, role distribution, key symbols, entry points. Use when first exploring a new codebase.
+- `root` (optional): Project root path. Defaults to current project.
 
 ### index_status
 Check centralized index health — chunks, files, indexed directories, model info, watcher status.

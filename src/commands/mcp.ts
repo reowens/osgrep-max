@@ -258,6 +258,21 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: "summarize_project",
+    description:
+      "High-level overview of an indexed project — languages, directory structure, role distribution, key symbols, and entry points. Use when first exploring a codebase.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        root: {
+          type: "string",
+          description:
+            "Project root (absolute path). Defaults to current project.",
+        },
+      },
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1153,6 +1168,171 @@ export const mcp = new Command("mcp")
       }
     }
 
+    async function handleSummarizeProject(
+      args: Record<string, unknown>,
+    ): Promise<ToolResult> {
+      const root =
+        typeof args.root === "string"
+          ? path.resolve(args.root)
+          : projectRoot;
+      const prefix = root.endsWith("/") ? root : `${root}/`;
+      const projectName = path.basename(root);
+
+      try {
+        const db = getVectorDb();
+        const table = await db.ensureTable();
+
+        const rows = await table
+          .query()
+          .select([
+            "path",
+            "role",
+            "is_exported",
+            "complexity",
+            "defined_symbols",
+            "referenced_symbols",
+          ])
+          .where(`path LIKE '${escapeSqlString(prefix)}%'`)
+          .limit(200000)
+          .toArray();
+
+        if (rows.length === 0) {
+          return ok(
+            `No indexed data found for ${root}. Run: gmax index --path ${root}`,
+          );
+        }
+
+        const files = new Set<string>();
+        const extCounts = new Map<string, number>();
+        const dirCounts = new Map<
+          string,
+          { files: Set<string>; chunks: number }
+        >();
+        const roleCounts = new Map<string, number>();
+        const symbolRefs = new Map<string, number>();
+        const entryPoints: Array<{ symbol: string; path: string }> = [];
+
+        for (const row of rows) {
+          const p = String((row as any).path || "");
+          const role = String((row as any).role || "IMPLEMENTATION");
+          const exported = Boolean((row as any).is_exported);
+          const complexity = Number((row as any).complexity || 0);
+          const defs = toStringArray((row as any).defined_symbols);
+          const refs = toStringArray((row as any).referenced_symbols);
+
+          files.add(p);
+
+          const ext =
+            path.extname(p).toLowerCase() || path.basename(p);
+          extCounts.set(ext, (extCounts.get(ext) || 0) + 1);
+
+          const rel = p.startsWith(prefix)
+            ? p.slice(prefix.length)
+            : p;
+          const parts = rel.split("/");
+          const dir =
+            parts.length > 2
+              ? `${parts.slice(0, 2).join("/")}/`
+              : parts.length > 1
+                ? `${parts[0]}/`
+                : "(root)";
+          if (!dirCounts.has(dir)) {
+            dirCounts.set(dir, { files: new Set(), chunks: 0 });
+          }
+          const dc = dirCounts.get(dir)!;
+          dc.files.add(p);
+          dc.chunks++;
+
+          roleCounts.set(role, (roleCounts.get(role) || 0) + 1);
+
+          for (const ref of refs) {
+            symbolRefs.set(ref, (symbolRefs.get(ref) || 0) + 1);
+          }
+
+          if (
+            exported &&
+            role === "ORCHESTRATION" &&
+            complexity >= 5 &&
+            defs.length > 0
+          ) {
+            const relPath = p.startsWith(prefix)
+              ? p.slice(prefix.length)
+              : p;
+            entryPoints.push({ symbol: defs[0], path: relPath });
+          }
+        }
+
+        const lines: string[] = [];
+        const projects = listProjects();
+        const proj = projects.find((p) => p.root === root);
+        lines.push(`Project: ${projectName} (${root})`);
+        lines.push(
+          `Last indexed: ${proj?.lastIndexed ?? "unknown"} • ${rows.length} chunks • ${files.size} files`,
+        );
+        lines.push("");
+
+        const extEntries = Array.from(extCounts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8);
+        const langLine = extEntries
+          .map(
+            ([ext, count]) =>
+              `${ext} (${Math.round((count / rows.length) * 100)}%)`,
+          )
+          .join(", ");
+        lines.push(`Languages: ${langLine}`);
+        lines.push("");
+
+        lines.push("Directory structure:");
+        const dirEntries = Array.from(dirCounts.entries())
+          .sort((a, b) => b[1].chunks - a[1].chunks)
+          .slice(0, 12);
+        for (const [dir, data] of dirEntries) {
+          lines.push(
+            `  ${dir.padEnd(25)} (${data.files.size} files, ${data.chunks} chunks)`,
+          );
+        }
+        lines.push("");
+
+        const roleEntries = Array.from(roleCounts.entries()).sort(
+          (a, b) => b[1] - a[1],
+        );
+        const roleLine = roleEntries
+          .map(
+            ([role, count]) =>
+              `${Math.round((count / rows.length) * 100)}% ${role}`,
+          )
+          .join(", ");
+        lines.push(`Roles: ${roleLine}`);
+        lines.push("");
+
+        const topSymbols = Array.from(symbolRefs.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8);
+        if (topSymbols.length > 0) {
+          lines.push("Key symbols (by reference count):");
+          for (const [sym, count] of topSymbols) {
+            lines.push(
+              `  ${sym.padEnd(25)} (referenced ${count}x)`,
+            );
+          }
+          lines.push("");
+        }
+
+        if (entryPoints.length > 0) {
+          lines.push("Entry points (exported orchestration):");
+          for (const ep of entryPoints.slice(0, 10)) {
+            lines.push(`  ${ep.symbol.padEnd(25)} ${ep.path}`);
+          }
+        }
+
+        return ok(lines.join("\n"));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return err(`Project summary failed: ${msg}`);
+      }
+    }
+
     // --- MCP server setup ---
 
     const transport = new StdioServerTransport();
@@ -1195,6 +1375,8 @@ export const mcp = new Command("mcp")
           return handleIndexStatus();
         case "summarize_directory":
           return handleSummarizeDirectory(toolArgs);
+        case "summarize_project":
+          return handleSummarizeProject(toolArgs);
         default:
           return err(`Unknown tool: ${name}`);
       }
