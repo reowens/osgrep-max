@@ -132,6 +132,23 @@ export class GraphBuilder {
     return { center, callers, callees: calleeNodes };
   }
 
+  async getImporters(symbol: string): Promise<string[]> {
+    const table = await this.db.ensureTable();
+    const escaped = escapeSqlString(symbol);
+    const rows = await table
+      .query()
+      .select(["path"])
+      .where(`content LIKE '%import%${escaped}%'`)
+      .limit(100)
+      .toArray();
+
+    const files = new Set<string>();
+    for (const row of rows) {
+      files.add(String((row as any).path || ""));
+    }
+    return Array.from(files);
+  }
+
   async buildGraphMultiHop(
     symbol: string,
     depth: number,
@@ -139,14 +156,19 @@ export class GraphBuilder {
     center: GraphNode | null;
     callerTree: CallerTree[];
     callees: GraphNode[];
+    importers: string[];
   }> {
-    const graph = await this.buildGraph(symbol);
+    const [graph, importers] = await Promise.all([
+      this.buildGraph(symbol),
+      this.getImporters(symbol),
+    ]);
 
     if (depth <= 1 || !graph.center) {
       return {
         center: graph.center,
         callerTree: graph.callers.map((c) => ({ node: c, callers: [] })),
         callees: graph.callees,
+        importers,
       };
     }
 
@@ -157,7 +179,7 @@ export class GraphBuilder {
       visited,
     );
 
-    return { center: graph.center, callerTree, callees: graph.callees };
+    return { center: graph.center, callerTree, callees: graph.callees, importers };
   }
 
   private async expandCallers(

@@ -69,9 +69,11 @@ File or directory structure — signatures with bodies collapsed (~4x fewer toke
 - `limit` (optional): Max files for directory mode (default 10, max 20)
 
 ### trace_calls
-Call graph — who calls a symbol and what it calls. Callers and callees include file:line locations. Unscoped — follows calls across all indexed directories.
+Call graph — who imports a symbol, who calls it, and what it calls. Includes file:line locations. Unscoped — follows calls across all indexed directories.
 - `symbol` (required): Function/method/class name
 - `depth` (optional): Traversal depth for callers (default 1, max 3). depth: 2 shows callers-of-callers with indentation.
+
+Output: definition, "Imported by" (files with import statements), "Callers" (functions that call it), "Calls" (what it calls).
 
 ### list_symbols
 List indexed symbols with definition locations, role, and export status.
