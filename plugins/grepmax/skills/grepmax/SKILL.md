@@ -67,6 +67,7 @@ Use sparingly. Prefer `semantic_search` when you know which directory to search.
 File or directory structure — signatures with bodies collapsed (~4x fewer tokens).
 - `target` (required): File path, directory path (e.g. "src/lib/search/"), or comma-separated files
 - `limit` (optional): Max files for directory mode (default 10, max 20)
+- `format` (optional): `"text"` (default) or `"json"` (structured symbol list with name, line, signature, type, exported)
 
 ### trace_calls
 Call graph — who imports a symbol, who calls it, and what it calls. Includes file:line locations. Unscoped — follows calls across all indexed directories.
