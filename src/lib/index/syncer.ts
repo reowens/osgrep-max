@@ -167,6 +167,13 @@ function createNoopMetaCache(): MetaCacheLike {
   };
 }
 
+export function computeStaleFiles(
+  cachedPaths: Set<string>,
+  seenPaths: Set<string>,
+): string[] {
+  return Array.from(cachedPaths).filter((p) => !seenPaths.has(p));
+}
+
 export async function initialSync(
   options: SyncOptions,
 ): Promise<InitialSyncResult> {
@@ -491,7 +498,7 @@ export async function initialSync(
     }
 
     // Stale cleanup: only remove paths scoped to this project's root
-    const stale = Array.from(cachedPaths).filter((p) => !seenPaths.has(p));
+    const stale = computeStaleFiles(cachedPaths, seenPaths);
     if (!dryRun && stale.length > 0 && !shouldSkipCleanup) {
       log("index", `Stale cleanup: ${stale.length} paths`);
       await vectorDb.deletePaths(stale);
