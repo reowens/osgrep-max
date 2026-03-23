@@ -59,13 +59,8 @@ function postJSON(
 /**
  * Check if MLX server is reachable. Caches result for CHECK_INTERVAL_MS.
  */
-async function isMlxUp(): Promise<boolean> {
-  const now = Date.now();
-  if (mlxAvailable !== null && now - lastCheck < CHECK_INTERVAL_MS) {
-    return mlxAvailable;
-  }
-
-  const result = await new Promise<boolean>((resolve) => {
+async function checkHealth(): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
     const req = http.get(
       { hostname: MLX_HOST, port: MLX_PORT, path: "/health", timeout: 2000 },
       (res) => {
@@ -79,6 +74,21 @@ async function isMlxUp(): Promise<boolean> {
       resolve(false);
     });
   });
+}
+
+async function isMlxUp(): Promise<boolean> {
+  const now = Date.now();
+  if (mlxAvailable !== null && now - lastCheck < CHECK_INTERVAL_MS) {
+    return mlxAvailable;
+  }
+
+  let result = await checkHealth();
+
+  // On first check (cold start), retry once after 3s — server may still be loading
+  if (!result && mlxAvailable === null) {
+    await new Promise((r) => setTimeout(r, 3000));
+    result = await checkHealth();
+  }
 
   mlxAvailable = result;
   lastCheck = now;

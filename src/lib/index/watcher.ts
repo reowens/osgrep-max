@@ -80,7 +80,17 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
     debounceTimer = setTimeout(() => processBatch(), DEBOUNCE_MS);
   };
 
-  const BATCH_TIMEOUT_MS = 120_000;
+  const taskTimeoutMs = (() => {
+      const fromEnv = Number.parseInt(
+        process.env.GMAX_WORKER_TASK_TIMEOUT_MS ?? "",
+        10,
+      );
+      return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 120_000;
+    })();
+    const BATCH_TIMEOUT_MS = Math.max(
+      Math.ceil(taskTimeoutMs * 1.5),
+      120_000,
+    );
 
   const processBatch = async () => {
     if (closed || processing || pending.size === 0) return;
