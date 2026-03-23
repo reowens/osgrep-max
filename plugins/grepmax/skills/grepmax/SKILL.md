@@ -108,11 +108,13 @@ Generate LLM summaries for indexed code in a directory. Summaries are stored and
 
 ## Workflow
 
-1. **Search** — `semantic_search` to find relevant code (pointers by default)
-2. **Read** — `Read file:line` for the specific ranges you need
-3. **Compare** — `semantic_search` with `detail: "code"` when comparing implementations
-4. **Trace** — `trace_calls` to understand call flow across files
-5. **Skeleton** — `code_skeleton` before reading large files
+1. **Explore** — `summarize_project` for high-level overview of a new codebase
+2. **Search** — `semantic_search` to find relevant code (pointers by default). Use `mode: "symbol"` for function/class names.
+3. **Read** — `Read file:line` for the specific ranges you need
+4. **Skeleton** — `code_skeleton` before reading large files or directories
+5. **Trace** — `trace_calls` to understand call flow, imports, and callers (use `depth: 2` for full chains)
+6. **Context** — `related_files` to see what else you need to look at when editing
+7. **Changes** — `recent_changes` after pulls to see what's been modified
 
 ## If results seem stale
 
