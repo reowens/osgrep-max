@@ -42,6 +42,8 @@ Parameters:
 - `detail` (optional): `"pointer"` (default) or `"code"`
 - `min_score` (optional): Filter by minimum relevance score (0-1)
 - `max_per_file` (optional): Cap results per file for diversity
+- `file` (optional): Filter to files matching this name (e.g. "syncer.ts"). Matches filename, not full path.
+- `exclude` (optional): Exclude files under this path prefix (e.g. "tests/" or "dist/")
 
 **When to use which mode:**
 - `pointer` — navigation, finding locations, understanding architecture
@@ -57,7 +59,7 @@ File structure — signatures with bodies collapsed (~4x fewer tokens).
 - `target` (required): File path relative to project root
 
 ### trace_calls
-Call graph — who calls a symbol and what it calls. Unscoped — follows calls across all indexed directories.
+Call graph — who calls a symbol and what it calls. Callers and callees include file:line locations. Unscoped — follows calls across all indexed directories.
 - `symbol` (required): Function/method/class name
 
 ### list_symbols

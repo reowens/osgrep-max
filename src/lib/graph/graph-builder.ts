@@ -61,7 +61,7 @@ export class GraphBuilder {
   async buildGraph(symbol: string): Promise<{
     center: GraphNode | null;
     callers: GraphNode[];
-    callees: string[];
+    callees: GraphNode[];
   }> {
     const table = await this.db.ensureTable();
     const escaped = escapeSqlString(symbol);
@@ -85,10 +85,46 @@ export class GraphBuilder {
     // 2. Get Callers
     const callers = await this.getCallers(symbol);
 
-    // 3. Get Callees (from center)
-    const callees = center ? center.calls : [];
+    // 3. Get Callees — resolve each to a GraphNode with file:line
+    const calleeNames = center ? center.calls.slice(0, 15) : [];
+    const calleeNodes: GraphNode[] = [];
+    for (const name of calleeNames) {
+      const esc = escapeSqlString(name);
+      const rows = await table
+        .query()
+        .where(`array_contains(defined_symbols, '${esc}')`)
+        .select([
+          "path",
+          "start_line",
+          "defined_symbols",
+          "referenced_symbols",
+          "role",
+          "parent_symbol",
+          "complexity",
+        ])
+        .limit(1)
+        .toArray();
+      if (rows.length > 0) {
+        calleeNodes.push(
+          this.mapRowToNode(
+            rows[0] as unknown as VectorRecord,
+            name,
+            "center",
+          ),
+        );
+      } else {
+        calleeNodes.push({
+          symbol: name,
+          file: "",
+          line: 0,
+          role: "",
+          calls: [],
+          calledBy: [],
+        });
+      }
+    }
 
-    return { center, callers, callees };
+    return { center, callers, callees: calleeNodes };
   }
 
   private mapRowToNode(

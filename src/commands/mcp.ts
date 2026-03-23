@@ -67,6 +67,16 @@ const TOOLS = [
           description:
             "Max results per file (default: no cap). Useful to get diversity across files.",
         },
+        file: {
+          type: "string",
+          description:
+            "Filter to files matching this name (e.g. 'syncer.ts'). Matches the filename, not the full path.",
+        },
+        exclude: {
+          type: "string",
+          description:
+            "Exclude files under this path prefix (e.g. 'tests/' or 'dist/').",
+        },
       },
       required: ["query"],
     },
@@ -98,6 +108,16 @@ const TOOLS = [
         max_per_file: {
           type: "number",
           description: "Max results per file (default: no cap).",
+        },
+        file: {
+          type: "string",
+          description:
+            "Filter to files matching this name (e.g. 'syncer.ts').",
+        },
+        exclude: {
+          type: "string",
+          description:
+            "Exclude files under this path prefix (e.g. 'tests/').",
         },
       },
       required: ["query"],
@@ -442,11 +462,19 @@ export const mcp = new Command("mcp")
           }
         }
 
+        const filters: Record<string, string> = {};
+        if (typeof args.file === "string" && args.file) {
+          filters.file = args.file;
+        }
+        if (typeof args.exclude === "string" && args.exclude) {
+          filters.exclude = args.exclude;
+        }
+
         const result = await searcher.search(
           query,
           limit,
           { rerank: true },
-          undefined,
+          Object.keys(filters).length > 0 ? filters : undefined,
           pathPrefix,
         );
 
@@ -636,11 +664,22 @@ export const mcp = new Command("mcp")
           lines.push("Callers: none");
         }
 
-        // Callees (cap at 15)
+        // Callees with file paths
         if (graph.callees.length > 0) {
-          const capped = graph.callees.slice(0, 15);
-          const suffix = graph.callees.length > 15 ? ` (+${graph.callees.length - 15} more)` : "";
-          lines.push(`Calls: ${capped.join(", ")}${suffix}`);
+          lines.push("Calls:");
+          for (const callee of graph.callees.slice(0, 15)) {
+            if (callee.file) {
+              const rel = callee.file.startsWith(projectRoot)
+                ? callee.file.slice(projectRoot.length + 1)
+                : callee.file;
+              lines.push(`  -> ${callee.symbol} ${rel}:${callee.line + 1}`);
+            } else {
+              lines.push(`  -> ${callee.symbol} (not indexed)`);
+            }
+          }
+          if (graph.callees.length > 15) {
+            lines.push(`  (+${graph.callees.length - 15} more)`);
+          }
         } else {
           lines.push("Calls: none");
         }
@@ -777,9 +816,23 @@ export const mcp = new Command("mcp")
           indexingLine,
           "",
           "Indexed directories:",
-          ...projects.map(
-            (p) => `  ${p.name}\t${p.root}\t${p.lastIndexed ?? "unknown"}`,
-          ),
+          ...(await Promise.all(
+            projects.map(async (p) => {
+              const prefix = p.root.endsWith("/") ? p.root : `${p.root}/`;
+              try {
+                const table = await db.ensureTable();
+                const rows = await table
+                  .query()
+                  .select(["id"])
+                  .where(`path LIKE '${escapeSqlString(prefix)}%'`)
+                  .limit(100000)
+                  .toArray();
+                return `  ${p.name}\t${p.root}\t${p.lastIndexed ?? "unknown"}\t(${rows.length} chunks)`;
+              } catch {
+                return `  ${p.name}\t${p.root}\t${p.lastIndexed ?? "unknown"}`;
+              }
+            }),
+          )),
         ].filter(Boolean);
         return ok(lines.join("\n"));
       } catch (e) {
