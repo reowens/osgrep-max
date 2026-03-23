@@ -122,7 +122,7 @@ import type { GraphNode } from "../graph/graph-builder";
 export function formatTrace(graph: {
   center: GraphNode | null;
   callers: GraphNode[];
-  callees: string[];
+  callees: GraphNode[];
 }): string {
   if (!graph.center) {
     return style.dim("Symbol not found.");
@@ -156,7 +156,15 @@ export function formatTrace(graph: {
   if (graph.callees.length > 0) {
     lines.push(style.bold("Callees (What does this call?):"));
     graph.callees.forEach((callee) => {
-      lines.push(`  ${style.cyan("↓")} ${callee}`);
+      if (callee.file) {
+        lines.push(
+          `  ${style.cyan("↓")} ${style.green(callee.symbol)} ${style.dim(`(${callee.file}:${callee.line})`)}`,
+        );
+      } else {
+        lines.push(
+          `  ${style.cyan("↓")} ${callee.symbol} ${style.dim("(not indexed)")}`,
+        );
+      }
     });
   } else {
     lines.push(style.dim("No known callees."));

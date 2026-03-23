@@ -328,6 +328,25 @@ export class Searcher {
       );
     }
 
+    // Handle file name filter
+    const fileFilter = _filters?.file;
+    if (typeof fileFilter === "string" && fileFilter) {
+      whereClauseParts.push(
+        `path LIKE '%/${escapeSqlString(fileFilter)}'`,
+      );
+    }
+
+    // Handle exclude filter
+    const excludeFilter = _filters?.exclude;
+    if (typeof excludeFilter === "string" && excludeFilter) {
+      const absExclude = pathPrefix
+        ? normalizePath(pathPrefix + excludeFilter)
+        : excludeFilter;
+      whereClauseParts.push(
+        `path NOT LIKE '${escapeSqlString(absExclude)}%'`,
+      );
+    }
+
     // Handle --def (definition) filter
     const defFilter = _filters?.def;
     if (typeof defFilter === "string" && defFilter) {
