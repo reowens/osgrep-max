@@ -13,29 +13,29 @@ Semantic code search — finds code by meaning, not just strings.
 
 ## IMPORTANT: Use CLI, not MCP tools
 
-**Always prefer `Bash(gmax ...)` over MCP tool calls.** The CLI is ~2x more token-efficient because MCP tool schemas add ~800 tokens of overhead per call. The CLI has full feature parity with every MCP tool.
+**Always prefer `Bash(gmax ...)` over MCP tool calls.** Use `--agent` for the most token-efficient output (one line per result, ~89% fewer tokens than default).
 
 ```
-Bash(gmax "auth handler" --role ORCHESTRATION --lang ts --plain -m 3)
+Bash(gmax "auth handler" --role ORCHESTRATION --lang ts --agent -m 3)
 ```
 
-**Only use MCP tools** for `index_status` (quick health check) or `summarize_directory` (LLM summaries). For everything else, use CLI.
+**Only use MCP tools** for `index_status` or `summarize_directory`. For everything else, use CLI with `--agent`.
 
 ## CLI commands (use these)
 
-### Search — `gmax "query" --plain`
+### Search — `gmax "query" --agent`
 ```
-gmax "where do we handle authentication" --plain
-gmax "database connection pooling" --role ORCHESTRATION --plain -m 5
-gmax "error handling" --lang ts --exclude tests/ --plain
-gmax "VectorDB" --symbol --plain          # search + call graph in one shot
-gmax "handler" --name "handle.*" --plain   # regex filter on symbol names
-gmax "auth" --file handler.ts --plain      # filter by filename
-gmax "query" -C 5 --plain                  # include context lines
-gmax "query" --imports --plain             # show file imports
+gmax "where do we handle authentication" --agent
+gmax "database connection pooling" --role ORCHESTRATION --agent -m 5
+gmax "error handling" --lang ts --exclude tests/ --agent
+gmax "VectorDB" --symbol --agent          # search + call graph in one shot
+gmax "handler" --name "handle.*" --agent   # regex filter on symbol names
+gmax "auth" --file handler.ts --agent      # filter by filename
 ```
 
-All flags: `--plain -m <n> --per-file <n> --min-score <n> --root <dir> --file <name> --exclude <prefix> --lang <ext> --role <role> --symbol --imports --name <regex> -C <n> --compact --content --scores --skeleton`
+Output format: `file:line symbol [role] — summary` (one line per result, no headers/footers)
+
+All flags: `--agent --plain -m <n> --per-file <n> --min-score <n> --root <dir> --file <name> --exclude <prefix> --lang <ext> --role <role> --symbol --imports --name <regex> -C <n> --compact --content --scores --skeleton`
 
 ### Trace — `gmax trace <symbol>`
 ```
@@ -91,7 +91,7 @@ Use MCP only for `index_status` and `summarize_directory`. Use CLI for everythin
 
 ## Tips
 
-- **Always use `--plain`** on CLI searches — agent-friendly output without ANSI codes.
+- **Always use `--agent`** on CLI searches — one line per result, most token-efficient.
 - **Be specific.** 5+ words. "auth" returns noise. "where does the server validate JWT tokens" is specific.
 - **Use `--role ORCHESTRATION`** to skip type definitions and find the actual logic.
 - **Use `--symbol`** when the query is a function/class name — gets search + trace in one call.
