@@ -9,7 +9,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Command } from "commander";
 import { MODEL_TIERS, PATHS } from "../config";
-import { GraphBuilder } from "../lib/graph/graph-builder";
+import { type CallerTree, GraphBuilder } from "../lib/graph/graph-builder";
 import { readGlobalConfig, readIndexConfig } from "../lib/index/index-config";
 import { generateSummaries } from "../lib/index/syncer";
 import { Searcher } from "../lib/search/searcher";
@@ -211,6 +211,11 @@ const TOOLS = [
           type: "string",
           description:
             "The function, method, or class name to trace (e.g. 'handleAuth')",
+        },
+        depth: {
+          type: "number",
+          description:
+            "Traversal depth for callers (default 1, max 3). depth: 2 shows callers-of-callers.",
         },
       },
       required: ["symbol"],
@@ -995,7 +1000,11 @@ export const mcp = new Command("mcp")
       try {
         const db = getVectorDb();
         const builder = new GraphBuilder(db);
-        const graph = await builder.buildGraph(symbol);
+        const depth = Math.min(
+          Math.max(Number(args.depth) || 1, 1),
+          3,
+        );
+        const graph = await builder.buildGraphMultiHop(symbol, depth);
 
         if (!graph.center) {
           return ok(`Symbol '${symbol}' not found in the index.`);
@@ -1008,14 +1017,26 @@ export const mcp = new Command("mcp")
           `${graph.center.symbol} [${graph.center.role}] ${graph.center.file}:${graph.center.line + 1}`,
         );
 
-        // Callers
-        if (graph.callers.length > 0) {
-          lines.push("Callers:");
-          for (const caller of graph.callers) {
+        // Callers (recursive tree)
+        function formatCallerTree(
+          trees: CallerTree[],
+          indent: number,
+        ): void {
+          for (const t of trees) {
+            const rel = t.node.file.startsWith(projectRoot)
+              ? t.node.file.slice(projectRoot.length + 1)
+              : t.node.file;
+            const pad = "  ".repeat(indent);
             lines.push(
-              `  <- ${caller.symbol} ${caller.file}:${caller.line + 1}`,
+              `${pad}<- ${t.node.symbol} ${rel}:${t.node.line + 1}`,
             );
+            formatCallerTree(t.callers, indent + 1);
           }
+        }
+
+        if (graph.callerTree.length > 0) {
+          lines.push("Callers:");
+          formatCallerTree(graph.callerTree, 1);
         } else {
           lines.push("Callers: none");
         }

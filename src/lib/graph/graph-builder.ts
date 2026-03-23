@@ -12,6 +12,11 @@ export interface GraphNode {
   complexity?: number;
 }
 
+export interface CallerTree {
+  node: GraphNode;
+  callers: CallerTree[];
+}
+
 export class GraphBuilder {
   constructor(private db: VectorDB) {}
 
@@ -125,6 +130,61 @@ export class GraphBuilder {
     }
 
     return { center, callers, callees: calleeNodes };
+  }
+
+  async buildGraphMultiHop(
+    symbol: string,
+    depth: number,
+  ): Promise<{
+    center: GraphNode | null;
+    callerTree: CallerTree[];
+    callees: GraphNode[];
+  }> {
+    const graph = await this.buildGraph(symbol);
+
+    if (depth <= 1 || !graph.center) {
+      return {
+        center: graph.center,
+        callerTree: graph.callers.map((c) => ({ node: c, callers: [] })),
+        callees: graph.callees,
+      };
+    }
+
+    const visited = new Set<string>([symbol]);
+    const callerTree = await this.expandCallers(
+      graph.callers,
+      depth - 1,
+      visited,
+    );
+
+    return { center: graph.center, callerTree, callees: graph.callees };
+  }
+
+  private async expandCallers(
+    callers: GraphNode[],
+    remainingDepth: number,
+    visited: Set<string>,
+  ): Promise<CallerTree[]> {
+    const trees: CallerTree[] = [];
+    for (const caller of callers) {
+      if (visited.has(caller.symbol)) {
+        trees.push({ node: caller, callers: [] });
+        continue;
+      }
+      visited.add(caller.symbol);
+
+      let subCallers: CallerTree[] = [];
+      if (remainingDepth > 0) {
+        const upstreamCallers = await this.getCallers(caller.symbol);
+        subCallers = await this.expandCallers(
+          upstreamCallers,
+          remainingDepth - 1,
+          visited,
+        );
+      }
+      trees.push({ node: caller, callers: subCallers });
+    }
+    return trees;
   }
 
   private mapRowToNode(
