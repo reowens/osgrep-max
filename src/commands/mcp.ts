@@ -1038,6 +1038,24 @@ export const mcp = new Command("mcp")
           `${graph.center.symbol} [${graph.center.role}] ${graph.center.file}:${graph.center.line + 1}`,
         );
 
+        // Importers
+        if (graph.importers.length > 0) {
+          // Filter out the file where the symbol is defined
+          const centerFile = graph.center.file;
+          const filteredImporters = graph.importers.filter(
+            (p) => p !== centerFile,
+          );
+          if (filteredImporters.length > 0) {
+            lines.push("Imported by:");
+            for (const imp of filteredImporters.slice(0, 10)) {
+              const rel = imp.startsWith(projectRoot)
+                ? imp.slice(projectRoot.length + 1)
+                : imp;
+              lines.push(`  ${rel}`);
+            }
+          }
+        }
+
         // Callers (recursive tree)
         function formatCallerTree(
           trees: CallerTree[],
