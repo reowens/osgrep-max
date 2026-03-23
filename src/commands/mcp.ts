@@ -35,161 +35,28 @@ const TOOLS = [
   {
     name: "semantic_search",
     description:
-      "Search code by meaning within a directory. Use natural language queries like 'where do we validate permissions'. Searches the current project by default. Use `root` to search a different directory's index (e.g. a parent directory).",
+      "Search code by meaning. Use scope:'all' for cross-project. Prefer CLI: gmax \"query\" --plain",
     inputSchema: {
       type: "object" as const,
       properties: {
-        query: {
-          type: "string",
-          description:
-            "Natural language search query. Be specific — more words give better results.",
-        },
-        limit: {
-          type: "number",
-          description: "Max results to return (default 3, max 50)",
-        },
-        root: {
-          type: "string",
-          description:
-            "Directory to search (absolute or relative path). Defaults to the current project root. Use to search a parent or sibling directory's indexed code.",
-        },
-        path: {
-          type: "string",
-          description:
-            "Restrict search to files under this path prefix (e.g. 'src/auth/'). Relative to the search root.",
-        },
-        detail: {
-          type: "string",
-          description:
-            "Output detail: 'pointer' (default, metadata only), 'code' (4-line snippets), or 'full' (complete chunk content with line numbers)",
-        },
-        min_score: {
-          type: "number",
-          description:
-            "Minimum relevance score (0-1). Results below this threshold are filtered out. Default: 0 (no filtering)",
-        },
-        max_per_file: {
-          type: "number",
-          description:
-            "Max results per file (default: no cap). Useful to get diversity across files.",
-        },
-        file: {
-          type: "string",
-          description:
-            "Filter to files matching this name (e.g. 'syncer.ts'). Matches the filename, not the full path.",
-        },
-        exclude: {
-          type: "string",
-          description:
-            "Exclude files under this path prefix (e.g. 'tests/' or 'dist/').",
-        },
-        language: {
-          type: "string",
-          description:
-            "Filter by file extension (e.g. 'ts', 'py', 'go'). Omit the dot.",
-        },
-        role: {
-          type: "string",
-          description:
-            "Filter by chunk role: 'ORCHESTRATION' (logic/flow), 'DEFINITION' (types/classes), or 'IMPLEMENTATION'.",
-        },
-        context_lines: {
-          type: "number",
-          description:
-            "Include N lines before and after the chunk (like grep -C). Only with detail 'code' or 'full'. Max 20.",
-        },
-        mode: {
-          type: "string",
-          description:
-            "Search mode: 'default' (semantic only) or 'symbol' (semantic + call graph trace appended). Use 'symbol' when query is a function/class name.",
-        },
-        include_imports: {
-          type: "boolean",
-          description:
-            "Prepend the file's import/require statements to each result. Deduped per file.",
-        },
-        name_pattern: {
-          type: "string",
-          description:
-            "Regex to filter by symbol name (e.g. 'handle.*Auth'). Case-insensitive. Applied after search.",
-        },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "search_all",
-    description:
-      "Search ALL indexed code across every directory. Use when you need to find code that could be anywhere. Returns results with full absolute paths so you know which project each result is from.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {
-        query: {
-          type: "string",
-          description: "Natural language search query.",
-        },
-        limit: {
-          type: "number",
-          description: "Max results to return (default 3, max 50)",
-        },
-        detail: {
-          type: "string",
-          description:
-            "Output detail: 'pointer' (default), 'code' (snippets), or 'full' (complete content)",
-        },
-        min_score: {
-          type: "number",
-          description: "Minimum relevance score (0-1). Default: 0",
-        },
-        max_per_file: {
-          type: "number",
-          description: "Max results per file (default: no cap).",
-        },
-        file: {
-          type: "string",
-          description:
-            "Filter to files matching this name (e.g. 'syncer.ts').",
-        },
-        exclude: {
-          type: "string",
-          description:
-            "Exclude files under this path prefix (e.g. 'tests/').",
-        },
-        language: {
-          type: "string",
-          description:
-            "Filter by file extension (e.g. 'ts', 'py').",
-        },
-        role: {
-          type: "string",
-          description:
-            "Filter by role: 'ORCHESTRATION', 'DEFINITION', or 'IMPLEMENTATION'.",
-        },
-        projects: {
-          type: "string",
-          description:
-            "Comma-separated project names to include (e.g. 'platform,osgrep'). Use index_status to see names.",
-        },
-        exclude_projects: {
-          type: "string",
-          description:
-            "Comma-separated project names to exclude (e.g. 'capstone,power').",
-        },
-        context_lines: {
-          type: "number",
-          description:
-            "Include N lines before/after chunk. Only with detail 'code' or 'full'. Max 20.",
-        },
-        include_imports: {
-          type: "boolean",
-          description:
-            "Prepend file's import statements to each result.",
-        },
-        name_pattern: {
-          type: "string",
-          description:
-            "Regex to filter by symbol name (e.g. 'handle.*Auth').",
-        },
+        query: { type: "string", description: "Natural language query (5+ words recommended)" },
+        limit: { type: "number", description: "Max results (default 3, max 50)" },
+        root: { type: "string", description: "Search a different directory (absolute path)" },
+        path: { type: "string", description: "Path prefix filter (e.g. 'src/auth/')" },
+        detail: { type: "string", description: "'pointer' (default), 'code', or 'full'" },
+        min_score: { type: "number", description: "Min score 0-1 (default 0)" },
+        max_per_file: { type: "number", description: "Max results per file" },
+        file: { type: "string", description: "Filename filter (e.g. 'syncer.ts')" },
+        exclude: { type: "string", description: "Exclude path prefix (e.g. 'tests/')" },
+        language: { type: "string", description: "Extension filter (e.g. 'ts', 'py')" },
+        role: { type: "string", description: "'ORCHESTRATION', 'DEFINITION', or 'IMPLEMENTATION'" },
+        context_lines: { type: "number", description: "Lines before/after chunk (max 20)" },
+        mode: { type: "string", description: "'default' or 'symbol' (appends call graph)" },
+        include_imports: { type: "boolean", description: "Prepend file imports to results" },
+        name_pattern: { type: "string", description: "Regex filter on symbol name" },
+        scope: { type: "string", description: "'project' (default) or 'all' (search everything)" },
+        projects: { type: "string", description: "Project names to include (comma-separated)" },
+        exclude_projects: { type: "string", description: "Project names to exclude (comma-separated)" },
       },
       required: ["query"],
     },
@@ -197,142 +64,82 @@ const TOOLS = [
   {
     name: "code_skeleton",
     description:
-      "Show the structure of source files — signatures with bodies collapsed (~4x fewer tokens). Accepts a file path, a directory path, or comma-separated file paths.",
+      "File structure with bodies collapsed (~4x fewer tokens). Accepts file, directory, or comma-separated paths.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        target: {
-          type: "string",
-          description:
-            "File path, directory path (e.g. 'src/lib/search/'), or comma-separated files (e.g. 'src/a.ts,src/b.ts'). Relative to project root.",
-        },
-        limit: {
-          type: "number",
-          description:
-            "Max files for directory mode (default 10, max 20). Ignored for single files.",
-        },
-        format: {
-          type: "string",
-          description:
-            "Output format: 'text' (default) or 'json' (structured symbol list with names, lines, signatures).",
-        },
+        target: { type: "string", description: "File, directory, or comma-separated paths" },
+        limit: { type: "number", description: "Max files for directory mode (default 10)" },
+        format: { type: "string", description: "'text' (default) or 'json'" },
       },
       required: ["target"],
     },
   },
   {
     name: "trace_calls",
-    description:
-      "Trace the call graph for a symbol — who calls it (callers) and what it calls (callees). Searches across ALL indexed code to follow calls across project boundaries.",
+    description: "Call graph: importers, callers (multi-hop), callees with file:line.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        symbol: {
-          type: "string",
-          description:
-            "The function, method, or class name to trace (e.g. 'handleAuth')",
-        },
-        depth: {
-          type: "number",
-          description:
-            "Traversal depth for callers (default 1, max 3). depth: 2 shows callers-of-callers.",
-        },
+        symbol: { type: "string", description: "Function/class name to trace" },
+        depth: { type: "number", description: "Caller depth (default 1, max 3)" },
       },
       required: ["symbol"],
     },
   },
   {
     name: "list_symbols",
-    description:
-      "List indexed symbols (functions, classes, types) with their definition locations. Useful for finding where things are defined without knowing exact names.",
+    description: "List indexed symbols with role and export status.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        pattern: {
-          type: "string",
-          description:
-            "Filter symbols by name (case-insensitive substring match)",
-        },
-        limit: {
-          type: "number",
-          description: "Max symbols to return (default 20, max 100)",
-        },
-        path: {
-          type: "string",
-          description: "Only include symbols defined under this path prefix",
-        },
+        pattern: { type: "string", description: "Name filter (case-insensitive)" },
+        limit: { type: "number", description: "Max results (default 20)" },
+        path: { type: "string", description: "Path prefix filter" },
       },
     },
   },
   {
     name: "index_status",
-    description:
-      "Check the status of the gmax index. Returns indexed directories, chunk counts, embed mode, index age, and watcher status.",
-    inputSchema: {
-      type: "object" as const,
-      properties: {},
-    },
+    description: "Index health: chunks, files, projects, watcher status.",
+    inputSchema: { type: "object" as const, properties: {} },
   },
   {
     name: "summarize_directory",
-    description:
-      "Generate LLM summaries for indexed code in a directory. Run after indexing. Summaries are stored and returned in search results. Requires the summarizer server on port 8101.",
+    description: "Generate LLM summaries for indexed chunks.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        path: {
-          type: "string",
-          description:
-            "Directory to summarize (absolute or relative). Defaults to current project root.",
-        },
-        limit: {
-          type: "number",
-          description:
-            "Max chunks to summarize per call (default 200, max 5000). Run again to continue.",
-        },
+        path: { type: "string", description: "Directory to summarize (default: project root)" },
+        limit: { type: "number", description: "Max chunks (default 200, max 5000)" },
       },
     },
   },
   {
     name: "summarize_project",
-    description:
-      "High-level overview of an indexed project — languages, directory structure, role distribution, key symbols, and entry points. Use when first exploring a codebase.",
+    description: "Project overview: languages, structure, roles, key symbols, entry points.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        root: {
-          type: "string",
-          description:
-            "Project root (absolute path). Defaults to current project.",
-        },
+        root: { type: "string", description: "Project root (default: current)" },
       },
     },
   },
   {
     name: "related_files",
-    description:
-      "Find files related to a given file by shared symbol references. Shows dependencies (what this file calls) and dependents (what calls this file).",
+    description: "Find dependencies and dependents of a file by shared symbols.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        file: {
-          type: "string",
-          description:
-            "File path relative to project root (e.g. 'src/lib/index/syncer.ts')",
-        },
-        limit: {
-          type: "number",
-          description:
-            "Max related files per direction (default 10)",
-        },
+        file: { type: "string", description: "File path relative to project root" },
+        limit: { type: "number", description: "Max results per direction (default 10)" },
       },
       required: ["file"],
     },
   },
   {
     name: "recent_changes",
-    description:
-      "Show recently modified files in the index. Useful after pulls or merges to see what changed.",
+    description: "Recently modified indexed files with timestamps.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -545,10 +352,11 @@ export const mcp = new Command("mcp")
 
     async function handleSemanticSearch(
       args: Record<string, unknown>,
-      searchAll = false,
+      isSearchAll = false,
     ): Promise<ToolResult> {
       const query = String(args.query || "");
       if (!query) return err("Missing required parameter: query");
+      const searchAll = isSearchAll || args.scope === "all";
 
       const limit = Math.min(Math.max(Number(args.limit) || 3, 1), 50);
 
