@@ -5,6 +5,7 @@ import type { MetaCache, MetaEntry } from "../store/meta-cache";
 import type { VectorRecord } from "../store/types";
 import type { VectorDB } from "../store/vector-db";
 import { escapeSqlString } from "../utils/filter-builder";
+import { INDEXABLE_EXTENSIONS } from "../../config";
 import { isIndexableFile } from "../utils/file-utils";
 import { log } from "../utils/logger";
 import { acquireWriterLockWithRetry } from "../utils/lock";
@@ -115,8 +116,16 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
             const stats = await fs.promises.stat(absPath);
             if (!isIndexableFile(absPath, stats.size)) continue;
 
-            // Check if content actually changed via hash
+            // Quick mtime/size check — skip worker pool if unchanged
             const cached = metaCache.get(absPath);
+            if (
+              cached &&
+              cached.mtimeMs === stats.mtimeMs &&
+              cached.size === stats.size
+            ) {
+              continue;
+            }
+
             const result = await pool.processFile({
               path: absPath,
               absolutePath: absPath,
@@ -271,7 +280,12 @@ export function startWatcher(opts: WatcherOptions): WatcherHandle {
 
   const onFileEvent = (event: "change" | "unlink", absPath: string) => {
     if (closed) return;
-    if (event !== "unlink" && !isIndexableFile(absPath)) return;
+    if (event !== "unlink") {
+      const ext = path.extname(absPath).toLowerCase();
+      const bn = path.basename(absPath).toLowerCase();
+      if (!INDEXABLE_EXTENSIONS.has(ext) && !INDEXABLE_EXTENSIONS.has(bn))
+        return;
+    }
     pending.set(absPath, event);
     scheduleBatch();
   };

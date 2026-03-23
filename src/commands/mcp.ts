@@ -481,61 +481,47 @@ export const mcp = new Command("mcp")
         _indexing = false;
         _indexProgress = "";
         _indexChildPid = null;
-        // Re-check if index now exists
-        try {
-          const db = getVectorDb();
-          if (await db.hasRowsForPath(projectRoot)) {
-            _indexReady = true;
-            console.log("[MCP] Background indexing complete.");
-            return;
-          }
-        } catch {}
       }
 
-      try {
-        const db = getVectorDb();
-        const hasIndex = await db.hasRowsForPath(projectRoot);
+      // Check project registry — more reliable than querying the DB.
+      // Avoids false negatives from lock contention and cascade re-indexing.
+      const projects = listProjects();
+      const isRegistered = projects.some((p) => p.root === projectRoot);
 
-        if (!hasIndex) {
-          if (_indexing) return; // Already indexing in background
-          _indexing = true;
-          _indexProgress = "starting...";
-          console.log("[MCP] No index found, spawning background index...");
+      if (isRegistered) {
+        _indexReady = true;
+        return;
+      }
 
-          // Spawn gmax index as a detached child process — doesn't hold
-          // the lock inside this MCP process, so CLI `gmax index` won't conflict.
-          const child = spawn(
-            process.argv[0],
-            [process.argv[1], "index", "--path", projectRoot],
-            { detached: true, stdio: "ignore" },
-          );
-          _indexChildPid = child.pid ?? null;
-          child.unref();
-          _indexProgress = `PID ${_indexChildPid}`;
-          console.log(
-            `[MCP] Background index started (PID: ${_indexChildPid})`,
-          );
+      // Truly first-time: no registry entry at all
+      if (_indexing) return;
 
-          child.on("exit", (code) => {
-            _indexing = false;
-            _indexProgress = "";
-            _indexChildPid = null;
-            if (code === 0) {
-              _indexReady = true;
-              console.log("[MCP] Background indexing complete.");
-            } else {
-              console.error(
-                `[MCP] Background indexing failed (exit code: ${code})`,
-              );
-            }
-          });
-        } else {
-          console.log("[MCP] Index exists, ready.");
+      _indexing = true;
+      _indexProgress = "starting...";
+      console.log("[MCP] First-time index for this project...");
+
+      const child = spawn(
+        process.argv[0],
+        [process.argv[1], "index", "--path", projectRoot],
+        { detached: true, stdio: "ignore" },
+      );
+      _indexChildPid = child.pid ?? null;
+      child.unref();
+      _indexProgress = `PID ${_indexChildPid}`;
+
+      child.on("exit", (code) => {
+        _indexing = false;
+        _indexProgress = "";
+        _indexChildPid = null;
+        if (code === 0) {
           _indexReady = true;
+          console.log("[MCP] First-time indexing complete.");
+        } else {
+          console.error(
+            `[MCP] Indexing failed (exit code: ${code})`,
+          );
         }
-      } catch (e) {
-        console.error("[MCP] Index sync failed:", e);
-      }
+      });
     }
 
     // --- Background watcher ---
@@ -615,7 +601,6 @@ export const mcp = new Command("mcp")
 
       const limit = Math.min(Math.max(Number(args.limit) || 3, 1), 50);
 
-      await ensureIndexReady();
       ensureWatcher();
 
       if (_indexing) {
