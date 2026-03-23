@@ -1,7 +1,7 @@
 ---
 name: grepmax
 description: Semantic code search. Use alongside grep - grep for exact strings, gmax for concepts.
-allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__search_all, mcp__grepmax__code_skeleton, mcp__grepmax__trace_calls, mcp__grepmax__list_symbols, mcp__grepmax__index_status, mcp__grepmax__summarize_directory, mcp__grepmax__summarize_project, mcp__grepmax__related_files, mcp__grepmax__recent_changes, Bash(gmax:*), Read"
+allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__code_skeleton, mcp__grepmax__trace_calls, mcp__grepmax__list_symbols, mcp__grepmax__index_status, mcp__grepmax__summarize_directory, mcp__grepmax__summarize_project, mcp__grepmax__related_files, mcp__grepmax__recent_changes, Bash(gmax:*), Read"
 ---
 
 ## What gmax does
@@ -85,14 +85,9 @@ gmax doctor                                # health check
 6. **Context** — `Bash(gmax related <file>)` to see what else to look at
 7. **Changes** — `Bash(gmax recent)` after pulls
 
-## MCP tools (only when CLI isn't suitable)
+## MCP tools
 
-MCP tools are available but consume more tokens. Use them only for:
-- `index_status` — quick health check (no CLI equivalent that's cheaper)
-- `summarize_directory` — LLM summary generation
-- `semantic_search` with `detail: "pointer"` — when you need the structured pointer format
-
-Full MCP tool documentation: semantic_search (16 params), search_all, code_skeleton, trace_calls, list_symbols, index_status, summarize_project, related_files, recent_changes, summarize_directory.
+Use MCP only for `index_status` and `summarize_directory`. Use CLI for everything else. For cross-project search, use `scope: "all"` on semantic_search (replaces search_all).
 
 ## Tips
 
