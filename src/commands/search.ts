@@ -404,6 +404,7 @@ export const search: Command = new CommanderCommand("search")
   .option("--imports", "Prepend file imports to each result", false)
   .option("--name <regex>", "Filter results by symbol name regex")
   .option("-C, --context <n>", "Include N lines before/after each result")
+  .option("--agent", "Ultra-compact output for AI agents (one line per result)", false)
   .argument("<pattern>", "Natural language query (e.g. \"where do we handle auth?\")")
   .argument("[path]", "Restrict search to this path prefix")
   .addHelpText(
@@ -439,6 +440,7 @@ Examples:
       imports: boolean;
       name: string;
       context: string;
+      agent: boolean;
     } = cmd.optsWithGlobals();
 
     const root = process.cwd();
@@ -561,8 +563,7 @@ Examples:
       vectorDb = new VectorDB(paths.lancedbDir);
 
       // Check for active indexing lock and warn if present
-      // This allows agents (via shim) to know results might be partial.
-      if (isLocked(paths.dataDir)) {
+      if (!options.agent && isLocked(paths.dataDir)) {
         console.warn(
           "⚠️  Warning: Indexing in progress... search results may be incomplete.",
         );
@@ -670,7 +671,7 @@ Examples:
         pathFilter,
       );
 
-      if (searchResult.warnings?.length) {
+      if (!options.agent && searchResult.warnings?.length) {
         for (const w of searchResult.warnings) {
           console.warn(`Warning: ${w}`);
         }
@@ -693,6 +694,71 @@ Examples:
         } catch {
           // Invalid regex — skip
         }
+      }
+
+      // Agent mode: ultra-compact one-line-per-result output
+      if (options.agent) {
+        if (!filteredData.length) {
+          console.log("(none)");
+        } else {
+          for (const r of filteredData) {
+            const absP = (r as any).path ?? (r as any).metadata?.path ?? "";
+            const relPath = absP.startsWith(effectiveRoot)
+              ? absP.slice(effectiveRoot.length + 1)
+              : absP;
+            const startLine = Math.max(
+              1,
+              ((r as any).startLine ??
+                (r as any).start_line ??
+                (r as any).generated_metadata?.start_line ??
+                0) + 1,
+            );
+            const defs = Array.isArray((r as any).defined_symbols)
+              ? (r as any).defined_symbols
+              : [];
+            const symbol = defs[0] || "";
+            const role = ((r as any).role ?? "")
+              .slice(0, 4)
+              .toUpperCase();
+            const summary = (r as any).summary
+              ? ` — ${(r as any).summary}`
+              : "";
+            const sym = symbol ? ` ${symbol}` : "";
+            const rl = role ? ` [${role}]` : "";
+            console.log(`${relPath}:${startLine}${sym}${rl}${summary}`);
+          }
+        }
+
+        // Agent trace (compact)
+        if (options.symbol && vectorDb && filteredData.length > 0) {
+          try {
+            const { GraphBuilder } = await import(
+              "../lib/graph/graph-builder"
+            );
+            const builder = new GraphBuilder(vectorDb);
+            const graph = await builder.buildGraphMultiHop(pattern, 1);
+            if (graph.center) {
+              console.log("---");
+              for (const t of graph.callerTree) {
+                const rel = t.node.file.startsWith(effectiveRoot)
+                  ? t.node.file.slice(effectiveRoot.length + 1)
+                  : t.node.file;
+                console.log(
+                  `<- ${t.node.symbol} ${rel}:${t.node.line + 1}`,
+                );
+              }
+              for (const c of graph.callees.slice(0, 10)) {
+                if (c.file) {
+                  const rel = c.file.startsWith(effectiveRoot)
+                    ? c.file.slice(effectiveRoot.length + 1)
+                    : c.file;
+                  console.log(`-> ${c.symbol} ${rel}:${c.line + 1}`);
+                }
+              }
+            }
+          } catch {}
+        }
+        return;
       }
 
       if (options.skeleton) {
