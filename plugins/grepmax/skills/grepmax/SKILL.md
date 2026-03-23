@@ -49,6 +49,7 @@ Parameters:
 - `role` (optional): Filter by chunk role: "ORCHESTRATION" (logic/flow), "DEFINITION" (types), or "IMPLEMENTATION"
 - `mode` (optional): `"default"` (semantic only) or `"symbol"` (semantic + call graph appended). Use "symbol" when query is a function or class name — gets search results + callers/callees in one call.
 - `include_imports` (optional): Prepend file's import/require statements to each result. Deduped per file — see dependencies at a glance.
+- `name_pattern` (optional): Regex to filter by symbol name (e.g. "handle.*Auth"). Case-insensitive. Applied after search.
 
 **When to use which mode:**
 - `pointer` — navigation, finding locations, understanding architecture
