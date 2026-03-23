@@ -404,6 +404,7 @@ export const serve = new Command("serve")
         process.exit(1);
       });
 
+      server.setTimeout(60_000); // 60s request timeout
       server.listen(port, () => {
         const address = server.address();
         const actualPort =
