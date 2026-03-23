@@ -1,142 +1,111 @@
-# Claude's Gaps — Features that would make gmax better for AI agents
+# Claude's Gaps — Completed
 
 *Written by Claude, from direct experience using gmax via MCP in real coding sessions.*
-*Last updated: v0.7.8 (2026-03-22)*
+*All items shipped as of v0.7.19 (2026-03-23)*
 
 ---
 
-## Shipped
+## All shipped
 
-### v0.7.5
-- **Callee file paths in `trace_calls`** — callees now show `-> symbol file:line`
-- **File name filter** — `file: "syncer.ts"` matches any path ending in that filename
-- **Exclude filter** — `exclude: "tests/"` removes paths from results
-- **Per-project chunk counts** — `index_status` shows chunk count per indexed directory
+### v0.6.3–v0.6.5 — Bug fixes
+- SIGINT handling in index command
+- Insert-before-delete in watcher
+- Watcher retry backoff + limits
+- FTS resilience (retry + warnings)
+- SQL escaping standardization
+- MCP root path validation
+- Worker respawn cap
+- Unhandled promise catch in MCP
+- Replace pkill with serve stop
+- gracefulExit in setup
 
-### v0.7.6
-- **Directory skeleton** — `code_skeleton target: "src/lib/search/"` returns all files
-- **Batch skeleton** — comma-separated targets in one call
+### v0.7.1 — Production polish
+- Help system overhaul (program name, descriptions, examples, grouping)
+- `gmax config` command
+- README rewrite (env vars, config docs, .gmaxignore)
+- SKILL.md comprehensive update
 
-### v0.7.7
-- **Full content mode** — `detail: "full"` returns complete chunk with line numbers
-- **Language filter** — `language: "ts"` restricts to file extension
-- **Role filter** — `role: "ORCHESTRATION"` shows only logic/flow code
+### v0.7.2–v0.7.4 — MCP reliability
+- Non-blocking MCP indexing with progress feedback
+- Plugin hooks fix (MLX server path resolution)
+- Spawn background index process (no lock contention with CLI)
 
-### v0.7.8
-- **Project filter for search_all** — `projects: "platform,osgrep"` or `exclude_projects: "capstone"`
+### v0.7.5 — Search filters + trace improvements
+- `file` filter (match by filename)
+- `exclude` filter (exclude path prefix)
+- Callee file paths in trace_calls
+- Per-project chunk counts in index_status
 
----
+### v0.7.6 — Skeleton enhancements
+- Directory skeleton (`code_skeleton target: "src/lib/search/"`)
+- Batch skeleton (comma-separated targets)
 
-## Phase 4 — Quick wins (easy, high impact)
+### v0.7.7 — Search power features
+- `detail: "full"` (complete chunk with line numbers)
+- `language` filter (by file extension)
+- `role` filter (ORCHESTRATION/DEFINITION/IMPLEMENTATION)
 
-### Line numbers in skeleton output
-Skeleton shows `function initialSync(...)` but no line number. I can't jump to it without searching again. Adding `// :164` annotations makes skeletons directly navigable.
+### v0.7.8 — Cross-project search
+- `projects` / `exclude_projects` for search_all
 
-**Effort:** Easy — the skeletonizer already has line info from Tree-sitter nodes, just not formatting it.
+### v0.7.9 — Navigation improvements
+- Skeleton line numbers (source line annotations)
+- Symbol type + export info in list_symbols
+- `context_lines` param (surrounding lines like grep -C)
 
-### Symbol type info in `list_symbols`
-Returns `symbol\tfile:line` but doesn't say function vs class vs interface vs type. When searching `Auth`, 15 results and no way to tell which is the class vs the type.
+### v0.7.10 — Combined search
+- `mode: "symbol"` (semantic search + call graph in one call)
 
-**Want:** `AuthService [class]\tsrc/auth/service.ts:12` — add role/type annotation.
+### v0.7.11 — Project overview
+- `summarize_project` tool (languages, structure, roles, key symbols, entry points)
 
-**Effort:** Easy — `defined_symbols` chunks have `role` and could infer type from Tree-sitter node type stored during chunking.
+### v0.7.12 — Dependency visibility
+- `include_imports` param (prepend file imports to search results)
 
-### Context lines in search results
-A chunk at lines 45-90 might depend on variables at line 30. Need N lines before/after to understand it.
+### v0.7.13 — Deep tracing
+- Multi-hop trace (`depth: 2-3` for callers-of-callers)
 
-**Want:** `context_lines: 5` param on semantic_search that includes surrounding lines.
+### v0.7.14 — File relationships
+- `related_files` tool (dependencies + dependents by shared symbols)
 
-**Effort:** Easy — read the file, grab `startLine - N` to `endLine + N`, format with line numbers.
+### v0.7.15 — Performance
+- 100x faster walker (eliminated realpathSync bottleneck)
 
----
+### v0.7.16 — Import tracking
+- "Imported by" section in trace_calls output
 
-## Phase 5 — Medium effort, high impact
+### v0.7.17 — Structured output
+- `format: "json"` on code_skeleton (structured symbol list)
 
-### Project overview tool (`summarize_project`)
-When encountering a new codebase, I need "what is this, what are the entry points, what are the subsystems?" Currently takes 5-10 tool calls to piece together.
+### v0.7.18 — Recent changes
+- `recent_changes` tool (recently modified files by mtime)
 
-**Want:** `summarize_project` MCP tool that returns: project name, language breakdown, top-level directory structure, entry points (files with main/index/app), key symbols by chunk count, total files/chunks.
-
-**Effort:** Medium — aggregate from existing index data (path patterns, symbol counts, role distribution).
-
-### Import context in search results
-When a result appears in `syncer.ts`, I don't know what it depends on without a Read call.
-
-**Want:** `include_imports: true` flag that prepends the file's import block to each result.
-
-**Effort:** Medium — read first N lines until imports end, language-aware detection.
-
-### Combined symbol + semantic search
-Search for "handleAuth" → get definition + implementation + callers in one shot.
-
-**Want:** `mode: "symbol"` that auto-detects symbol-like queries and appends trace data.
-
-**Effort:** Medium — symbol detection heuristic + inline trace.
-
-### Multi-hop trace (`depth: 2`)
-"What calls the thing that calls handleAuth?" requires two trace calls.
-
-**Want:** `depth` param for N-hop graph traversal with cycle detection.
-
-**Effort:** Medium — recursive traversal, deduplicate nodes.
-
----
-
-## Phase 6 — Medium effort, moderate impact
-
-### Recent changes awareness
-After watcher re-indexes, can't see what was updated. No way to focus on actively modified code.
-
-**Want:** `recent_changes` tool or `--recent` flag that sorts by index time / shows recently modified files.
-
-**Effort:** Medium — MetaCache has mtimeMs, could sort/filter by it.
-
-### Related files discovery
-When editing `syncer.ts`, what other files typically change with it?
-
-**Want:** `related_files` tool powered by co-import analysis (files that share imports/symbols).
-
-**Effort:** Medium — analyze import overlap from indexed chunks.
-
-### Find usages (import tracking)
-`trace_calls` finds callers but not files that import/re-export a symbol.
-
-**Want:** `imports` section in trace output showing files that import the symbol.
-
-**Effort:** Medium — scan import statements in content field.
-
-### Structured skeleton output
-Skeleton is a text blob. JSON output with `{name, line, signature, type}` per symbol would enable programmatic navigation.
-
-**Want:** `--json` flag or `format: "json"` param on code_skeleton.
-
-**Effort:** Medium — skeletonizer already has structured data, just needs a JSON formatter.
+### v0.7.19 — Pattern matching
+- `name_pattern` regex filter on search results
 
 ---
 
-## Nice to have
+## Final stats
 
-### Stale result indicator
-`stale: true` per result based on file mtime vs index time.
-
-### Search confidence explanation
-Why a result is High/Medium/Low confidence.
-
-### Regex name pattern filter
-`name_pattern: "handle.*Auth"` to filter by symbol naming pattern.
+- **11 MCP tools**: semantic_search, search_all, code_skeleton, trace_calls, list_symbols, index_status, summarize_directory, summarize_project, related_files, recent_changes + mode:"symbol"
+- **16 search params**: query, limit, root, path, detail, context_lines, min_score, max_per_file, file, exclude, language, role, mode, include_imports, name_pattern, projects/exclude_projects
+- **22 releases** in one session (v0.6.2 → v0.7.19)
 
 ---
 
-## What's already great
+## What's great
 
-- **Pointer mode** is the right default — metadata without code saves massive context
-- **Role classification + filter** lets me skip noise and find orchestration code
-- **Summaries** are the killer feature — understand code without reading it
-- **`code_skeleton`** with directory/batch mode is indispensable
-- **`detail: "full"`** eliminates most Read calls after search
-- **`language` filter** essential in polyglot repos
-- **`projects`/`exclude_projects`** on search_all scopes cross-project search
-- **Non-blocking indexing** with progress feedback prevents hanging
-- **FTS warnings** surface degraded search instead of silently failing
-- **Composable filters** — language + role + file + exclude + projects all work together
-- **Callee file paths** in trace eliminate follow-up searches
+- **Pointer mode** — metadata without code saves massive context
+- **Role classification + filter** — skip noise, find orchestration code
+- **Summaries** — understand code without reading it
+- **`code_skeleton`** with directory/batch/JSON mode — indispensable
+- **`detail: "full"` + `context_lines`** — eliminates most Read calls
+- **`mode: "symbol"`** — search + trace in one call
+- **`summarize_project`** — instant codebase overview
+- **`related_files`** — know what to look at when editing
+- **`recent_changes`** — focus on what's actively changing
+- **`trace_calls` with depth + imports** — full dependency picture
+- **`name_pattern`** — bridges semantic + pattern matching
+- **Composable filters** — all params work together
+- **Non-blocking indexing** with progress feedback
+- **100x faster walker** — no more blocking realpathSync

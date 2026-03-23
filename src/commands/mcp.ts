@@ -104,6 +104,11 @@ const TOOLS = [
           description:
             "Prepend the file's import/require statements to each result. Deduped per file.",
         },
+        name_pattern: {
+          type: "string",
+          description:
+            "Regex to filter by symbol name (e.g. 'handle.*Auth'). Case-insensitive. Applied after search.",
+        },
       },
       required: ["query"],
     },
@@ -175,6 +180,11 @@ const TOOLS = [
           type: "boolean",
           description:
             "Prepend file's import statements to each result.",
+        },
+        name_pattern: {
+          type: "string",
+          description:
+            "Regex to filter by symbol name (e.g. 'handle.*Auth').",
         },
       },
       required: ["query"],
@@ -816,6 +826,7 @@ export const mcp = new Command("mcp")
             absPath,
             text,
             score: typeof r.score === "number" ? r.score : 0,
+            symbols: defs,
           };
         });
 
@@ -831,6 +842,21 @@ export const mcp = new Command("mcp")
             counts.set(r.absPath, count + 1);
             return true;
           });
+        }
+
+        const namePattern =
+          typeof args.name_pattern === "string"
+            ? args.name_pattern
+            : "";
+        if (namePattern) {
+          try {
+            const regex = new RegExp(namePattern, "i");
+            results = results.filter((r) =>
+              r.symbols.some((s: string) => regex.test(s)),
+            );
+          } catch {
+            // Invalid regex — skip filter
+          }
         }
 
         let output = results.map((r) => r.text).join("\n\n");
