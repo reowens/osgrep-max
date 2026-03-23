@@ -196,6 +196,11 @@ const TOOLS = [
           description:
             "Max files for directory mode (default 10, max 20). Ignored for single files.",
         },
+        format: {
+          type: "string",
+          description:
+            "Output format: 'text' (default) or 'json' (structured symbol list with names, lines, signatures).",
+        },
       },
       required: ["target"],
     },
@@ -948,15 +953,31 @@ export const mcp = new Command("mcp")
         }
       }
 
+      const fmt =
+        typeof args.format === "string" ? args.format : "text";
+
       // Generate skeletons for all targets
       const parts: string[] = [];
+      const jsonFiles: Array<{
+        file: string;
+        language: string;
+        tokenEstimate: number;
+        symbols: Array<{
+          name: string;
+          line: number;
+          signature: string;
+          type: string;
+          exported: boolean;
+        }>;
+      }> = [];
       const skel = await getSkeletonizer();
 
       for (const t of targets) {
         const absPath = path.resolve(projectRoot, t);
 
         if (!fs.existsSync(absPath)) {
-          parts.push(`// ${t} — file not found`);
+          if (fmt !== "json")
+            parts.push(`// ${t} — file not found`);
           continue;
         }
 
@@ -966,43 +987,105 @@ export const mcp = new Command("mcp")
           sourceContent = fs.readFileSync(absPath, "utf-8");
         } catch {}
 
+        let skeleton = "";
+        let language = "";
+        let tokenEstimate = 0;
+
         // Try cached skeleton first
         try {
           const db = getVectorDb();
           const cached = await getStoredSkeleton(db, absPath);
           if (cached) {
-            const tokens = Math.ceil(cached.length / 4);
-            const annotated = sourceContent
-              ? annotateSkeletonLines(cached, sourceContent)
-              : cached;
-            parts.push(`// ${t} (~${tokens} tokens)\n\n${annotated}`);
+            skeleton = cached;
+            tokenEstimate = Math.ceil(cached.length / 4);
+          }
+        } catch {}
+
+        // Generate live if no cache
+        if (!skeleton) {
+          try {
+            const content =
+              sourceContent || fs.readFileSync(absPath, "utf-8");
+            const result = await skel.skeletonizeFile(absPath, content);
+            if (result.success) {
+              skeleton = result.skeleton;
+              tokenEstimate = result.tokenEstimate;
+              language = result.language;
+            } else {
+              if (fmt !== "json")
+                parts.push(`// ${t} — skeleton failed: ${result.error}`);
+              continue;
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (fmt !== "json")
+              parts.push(`// ${t} — error: ${msg}`);
             continue;
           }
-        } catch {
-          // Index may not exist yet — fall through to live generation
         }
 
-        // Generate live
-        try {
-          const content = sourceContent || fs.readFileSync(absPath, "utf-8");
-          const result = await skel.skeletonizeFile(absPath, content);
-          if (result.success) {
-            const annotated = annotateSkeletonLines(
-              result.skeleton,
-              content,
+        if (fmt === "json") {
+          // Extract structured symbols from annotated skeleton
+          const annotated = sourceContent
+            ? annotateSkeletonLines(skeleton, sourceContent)
+            : skeleton;
+          const symbols = annotated
+            .split("\n")
+            .filter((l) => /^\s*\d+│/.test(l))
+            .map((l) => {
+              const m = l.match(/^\s*(\d+)│(.+)/);
+              if (!m) return null;
+              const line = Number.parseInt(m[1], 10);
+              const sig = m[2].trim();
+              const exported = sig.includes("export ");
+              const type =
+                sig.match(
+                  /\b(class|interface|type|function|def|fn|func)\b/,
+                )?.[1] || "other";
+              const name =
+                sig.match(
+                  /(?:function|class|interface|type|def|fn|func)\s+(\w+)/,
+                )?.[1] ||
+                sig.match(/^(?:async\s+)?(\w+)\s*[(<]/)?.[1] ||
+                "unknown";
+              return {
+                name,
+                line,
+                signature: sig
+                  .replace(/\s*\{?\s*\/\/.*$/, "")
+                  .trim(),
+                type,
+                exported,
+              };
+            })
+            .filter(
+              (s): s is NonNullable<typeof s> =>
+                s !== null && s.name !== "unknown",
             );
-            parts.push(
-              `// ${t} (~${result.tokenEstimate} tokens)\n\n${annotated}`,
-            );
-          } else {
-            parts.push(`// ${t} — skeleton failed: ${result.error}`);
-          }
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          parts.push(`// ${t} — error: ${msg}`);
+
+          jsonFiles.push({
+            file: t,
+            language: language || path.extname(t).slice(1),
+            tokenEstimate,
+            symbols,
+          });
+        } else {
+          const annotated = sourceContent
+            ? annotateSkeletonLines(skeleton, sourceContent)
+            : skeleton;
+          parts.push(
+            `// ${t} (~${tokenEstimate} tokens)\n\n${annotated}`,
+          );
         }
       }
 
+      if (fmt === "json") {
+        const output =
+          jsonFiles.length === 1
+            ? jsonFiles[0]
+            : { files: jsonFiles };
+        return ok(JSON.stringify(output, null, 2));
+      }
       return ok(parts.join("\n\n---\n\n"));
     }
 
