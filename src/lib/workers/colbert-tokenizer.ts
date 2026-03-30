@@ -28,16 +28,14 @@ export class ColBERTTokenizer {
     // But we still try to look them up dynamically first.
 
     const tokenizer = this.tokenizer;
-    const get = (token: string) => tokenizer?.model.tokens_to_ids.get(token);
+    const get = (token: string): number | undefined => {
+      const id = tokenizer?.convert_tokens_to_ids(token);
+      return typeof id === "number" && id >= 0 ? id : undefined;
+    };
 
-    const specialTokens = tokenizer as Partial<{
-      cls_token: string;
-      sep_token: string;
-      pad_token: string;
-    }>;
-    const clsId = get(specialTokens.cls_token ?? "[CLS]") ?? 50281;
-    const sepId = get(specialTokens.sep_token ?? "[SEP]") ?? 50282;
-    const padId = get(specialTokens.pad_token ?? "[PAD]") ?? 50283;
+    const clsId = get("[CLS]") ?? 50281;
+    const sepId = get("[SEP]") ?? 50282;
+    const padId = get("[PAD]") ?? 50283;
     const maskId = get(MASK_TOKEN) ?? 50284;
     const queryMarkerId = get(QUERY_MARKER_TOKEN) ?? 50368;
     const docMarkerId = get(DOC_MARKER_TOKEN) ?? 50369;

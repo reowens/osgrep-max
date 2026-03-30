@@ -28,7 +28,7 @@ async function main() {
   // But let's see if the tokenizer resolves "[Q] " correctly.
 
   const encoded = await tokenizer(queryText, { add_special_tokens: false });
-  const inputIds = encoded.input_ids; // BigInt64Array in newer transformers versions
+  const inputIds = (encoded.input_ids as any).data ?? encoded.input_ids;
 
   // Convert to standard array for inspection
   const ids = Array.from(inputIds).map(Number);
@@ -36,15 +36,15 @@ async function main() {
   // Mixedbread expects: [CLS] [Q] ...tokens... [SEP]
   // Let's verify we can construct that.
   const Q_ID = 50368;
-  const CLS_ID = tokenizer.model.tokens_to_ids.get("[CLS]") ?? 50281; // Fallback to standard if null
+  const CLS_ID = tokenizer.convert_tokens_to_ids("[CLS]") ?? 50281; // Fallback to standard if null
 
   console.log(`\n--- Tokenizer Check ---`);
   console.log(`Query: "${queryText}"`);
   console.log(`Raw IDs:`, ids);
 
   // Check if tokenizer recognizes the special tokens by text
-  const qCheck = tokenizer.model.tokens_to_ids.get("[Q] ");
-  const dCheck = tokenizer.model.tokens_to_ids.get("[D] ");
+  const qCheck = tokenizer.convert_tokens_to_ids("[Q] ");
+  const dCheck = tokenizer.convert_tokens_to_ids("[D] ");
 
   if (qCheck === 50368 && dCheck === 50369) {
     console.log(`✅ Tokenizer Map Correct: [Q] -> ${qCheck}, [D] -> ${dCheck}`);
@@ -61,8 +61,8 @@ async function main() {
   console.log(`Skiplist size: ${skiplist.size}`);
 
   // Check common punctuation
-  const commaId = tokenizer.model.tokens_to_ids.get(",");
-  const dotId = tokenizer.model.tokens_to_ids.get(".");
+  const commaId = tokenizer.convert_tokens_to_ids(",");
+  const dotId = tokenizer.convert_tokens_to_ids(".");
 
   if (skiplist.has(commaId) && skiplist.has(dotId)) {
     console.log(
