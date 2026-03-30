@@ -66,16 +66,20 @@ const mockSearcher = {
 };
 
 vi.mock("../src/lib/store/vector-db", () => ({
-  VectorDB: vi.fn(() => ({
-    listPaths: vi.fn(async () => new Map()),
-    hasAnyRows: vi.fn(async () => false),
-    createFTSIndex: vi.fn(async () => {}),
-    close: vi.fn(async () => {}),
-  })),
+  VectorDB: vi.fn(function () {
+    return {
+      listPaths: vi.fn(async () => new Map()),
+      hasAnyRows: vi.fn(async () => false),
+      createFTSIndex: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+    };
+  }),
 }));
 
 vi.mock("../src/lib/search/searcher", () => ({
-  Searcher: vi.fn(() => mockSearcher),
+  Searcher: vi.fn(function () {
+    return mockSearcher;
+  }),
 }));
 
 import { search } from "../src/commands/search";

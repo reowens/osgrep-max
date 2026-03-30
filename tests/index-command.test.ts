@@ -48,7 +48,9 @@ const fakeVectorDb = {
 };
 
 vi.mock("../src/lib/store/vector-db", () => ({
-  VectorDB: vi.fn(() => fakeVectorDb),
+  VectorDB: vi.fn(function () {
+    return fakeVectorDb;
+  }),
 }));
 
 import { index } from "../src/commands/index";
