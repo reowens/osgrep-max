@@ -432,21 +432,38 @@ export class Searcher {
       }
     }
 
-    let vectorQuery = table.vectorSearch(queryVector).limit(PRE_RERANK_K);
+    // Phase A: Lightweight retrieval — only columns needed for RRF, cosine, boost, dedup
+    const LIGHTWEIGHT_COLUMNS = [
+      "id", "path", "hash", "chunk_index", "start_line", "end_line",
+      "is_anchor", "chunk_type", "role", "complexity", "is_exported",
+      "content", "parent_symbol", "referenced_symbols", "pooled_colbert_48d",
+    ];
+    // _distance is auto-added by vectorSearch, _score by FTS — include each
+    // in the respective query to suppress LanceDB deprecation warnings
+    const VECTOR_COLUMNS = [...LIGHTWEIGHT_COLUMNS, "_distance"];
+    const FTS_COLUMNS = [...LIGHTWEIGHT_COLUMNS, "_score"];
+
+    let vectorQuery = table
+      .vectorSearch(queryVector)
+      .select(VECTOR_COLUMNS)
+      .limit(PRE_RERANK_K);
     if (whereClause) {
       vectorQuery = vectorQuery.where(whereClause);
     }
-    const vectorResults = (await vectorQuery.toArray()) as VectorRecord[];
+    let vectorResults = (await vectorQuery.toArray()).map((r: any) => ({ ...r })) as VectorRecord[];
 
     let ftsResults: VectorRecord[] = [];
     let ftsSearchFailed = false;
     if (this.ftsAvailable) {
       try {
-        let ftsQuery = table.search(query).limit(PRE_RERANK_K);
+        let ftsQuery = table
+          .search(query)
+          .select(FTS_COLUMNS)
+          .limit(PRE_RERANK_K);
         if (whereClause) {
           ftsQuery = ftsQuery.where(whereClause);
         }
-        ftsResults = (await ftsQuery.toArray()) as VectorRecord[];
+        ftsResults = (await ftsQuery.toArray()).map((r: any) => ({ ...r })) as VectorRecord[];
       } catch (e) {
         ftsSearchFailed = true;
         this.ftsAvailable = false;
@@ -485,12 +502,19 @@ export class Searcher {
       .map(([key]) => docMap.get(key))
       .filter(Boolean) as VectorRecord[];
 
+    // Free raw search results — docMap holds the only needed references
+    vectorResults.length = 0;
+    ftsResults.length = 0;
+
     // Item 8: Widen PRE_RERANK_K
     // Retrieve a wide set for Stage 1 filtering
     const envStage1 = Number.parseInt(process.env.GMAX_STAGE1_K ?? "", 10);
     const STAGE1_K =
       Number.isFinite(envStage1) && envStage1 > 0 ? envStage1 : 200;
     const topCandidates = fused.slice(0, STAGE1_K);
+
+    // Free docMap — topCandidates already holds record references
+    docMap.clear();
 
     // Item 9: Two-stage rerank
     // Stage 1: Cheap pooled cosine filter
@@ -533,6 +557,33 @@ export class Searcher {
     }
 
     const rerankCandidates = stage2Candidates.slice(0, RERANK_TOP);
+
+    // Phase B: Lazy-load colbert data only for the ~20 rerank candidates
+    if (doRerank && rerankCandidates.length > 0) {
+      const rerankIds = rerankCandidates
+        .map((doc) => doc.id)
+        .filter(Boolean)
+        .map((id) => `'${escapeSqlString(id)}'`);
+      if (rerankIds.length > 0) {
+        const colbertRows = await table
+          .query()
+          .select(["id", "colbert", "colbert_scale", "doc_token_ids"])
+          .where(`id IN (${rerankIds.join(",")})`)
+          .limit(rerankIds.length)
+          .toArray();
+        const colbertMap = new Map(
+          colbertRows.map((r: any) => [r.id, r]),
+        );
+        for (const doc of rerankCandidates) {
+          const extra = colbertMap.get(doc.id);
+          if (extra) {
+            (doc as any).colbert = extra.colbert;
+            (doc as any).colbert_scale = extra.colbert_scale;
+            (doc as any).doc_token_ids = extra.doc_token_ids;
+          }
+        }
+      }
+    }
 
     const scores = doRerank
       ? await pool.rerank(
@@ -596,6 +647,37 @@ export class Searcher {
         seenFiles.set(path, count + 1);
       }
       if (diversified.length >= finalLimit) break;
+    }
+
+    // Phase C: Lazy-load display columns only for the final ~10 results
+    const finalIds = diversified
+      .map((item) => item.record.id)
+      .filter(Boolean)
+      .map((id) => `'${escapeSqlString(id)}'`);
+    if (finalIds.length > 0) {
+      const displayRows = await table
+        .query()
+        .select([
+          "id", "display_text", "defined_symbols", "imports", "exports",
+          "summary", "file_skeleton",
+        ])
+        .where(`id IN (${finalIds.join(",")})`)
+        .limit(finalIds.length)
+        .toArray();
+      const displayMap = new Map(
+        displayRows.map((r: any) => [r.id, r]),
+      );
+      for (const item of diversified) {
+        const extra = displayMap.get(item.record.id);
+        if (extra) {
+          (item.record as any).display_text = extra.display_text;
+          (item.record as any).defined_symbols = extra.defined_symbols;
+          (item.record as any).imports = extra.imports;
+          (item.record as any).exports = extra.exports;
+          (item.record as any).summary = extra.summary;
+          (item.record as any).file_skeleton = extra.file_skeleton;
+        }
+      }
     }
 
     const finalResults = diversified.map((item: ScoredItem) => ({
