@@ -23,6 +23,19 @@ vi.mock("../src/lib/utils/project-root", () => ({
   findProjectRoot: vi.fn(() => "/tmp/project"),
 }));
 
+vi.mock("../src/lib/utils/project-registry", () => ({
+  getProject: vi.fn(() => ({
+    root: "/tmp/project",
+    name: "project",
+    vectorDim: 384,
+    modelTier: "small",
+    embedMode: "cpu",
+    lastIndexed: new Date().toISOString(),
+    chunkCount: 100,
+    status: "indexed",
+  })),
+}));
+
 vi.mock("../src/lib/index/sync-helpers", () => ({
   createIndexingSpinner: vi.fn(() => ({
     spinner,
