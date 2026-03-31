@@ -125,30 +125,126 @@ export function launchWatcher(projectRoot: string): { pid: number } | null
 
 ---
 
-## Phase 5: Single daemon architecture (future)
+## Phase 5: Single daemon architecture
 
 **Goal:** One watcher process for all projects instead of N per-project processes.
 
-> **Note:** This is a larger architectural change. Phases 1-4 fix the immediate bugs with the current per-project model. Phase 5 is the future-state redesign.
+### 5.1 IPC via Unix domain socket
 
-### 5.1 Convert watcher to multi-project daemon
-- Single `gmax watch` process watches all registered projects
-- Uses chokidar's `watcher.add()` / `watcher.unwatch()` for dynamic project management
-- On `gmax add`: daemon picks up new project automatically (via LMDB watch or IPC)
-- On `gmax remove`: daemon unwatches project
-- SessionStart hook starts daemon if not running (not per-project watcher)
+**Socket:** `~/.gmax/daemon.sock`
 
-### 5.2 Daemon lifecycle
-- Started by first `gmax add` or SessionStart hook
-- Idle timeout: shuts down after 30min if NO registered projects have activity
-- Single PID in LMDB, multiple project roots tracked
-- Health endpoint or heartbeat for liveliness detection
+The daemon listens on a Unix domain socket. CLI commands send JSON messages
+and receive JSON responses. This gives us:
+- Immediate feedback ("added" / "error") back to CLI
+- Automatic crash detection (ECONNREFUSED = daemon dead)
+- Clean concurrent handling from multiple Claude sessions
+- ~130µs latency vs 2-10s for polling
 
-### 5.3 Why defer this
-- Phases 1-4 fix all critical bugs with minimal risk
-- Single daemon requires IPC or LMDB-based signaling for add/remove
-- Per-project model works fine for <10 projects
-- Daemon makes sense when users have 20+ projects
+**Protocol:**
+```
+→ {"cmd": "watch", "root": "/path/to/project"}
+← {"ok": true}
+
+→ {"cmd": "unwatch", "root": "/path/to/project"}
+← {"ok": true}
+
+→ {"cmd": "status"}
+← {"ok": true, "projects": [{"root": "...", "status": "watching"}]}
+
+→ {"cmd": "ping"}
+← {"ok": true, "pid": 12345, "uptime": 3600}
+```
+
+**Stale socket cleanup:** On daemon startup, try connecting to existing socket.
+If ECONNREFUSED, unlink and recreate. If connected, another daemon is alive — exit.
+
+### 5.2 Daemon process (`gmax watch --daemon`)
+
+**File:** `src/commands/watch.ts` (extend existing)
+
+New `--daemon` flag starts multi-project mode:
+1. Read all registered projects from `projects.json`
+2. Create single chokidar instance with `watcher.add()` for each root
+3. Listen on `~/.gmax/daemon.sock` for IPC commands
+4. Register in LMDB watcher store (single entry, PID + "daemon" status)
+5. Heartbeat every 60s (already implemented)
+6. Idle timeout: 30min of no activity across ALL projects → shutdown
+
+On IPC `watch` command:
+- Call `chokidar.add(root)` on the existing watcher instance
+- Update LMDB store
+
+On IPC `unwatch` command:
+- Call `chokidar.unwatch(root)`
+- Update LMDB store
+
+### 5.3 Daemon client utility
+
+**New file:** `src/lib/utils/daemon-client.ts`
+
+```typescript
+export async function sendDaemonCommand(
+  cmd: DaemonCommand,
+): Promise<DaemonResponse>
+
+export async function isDaemonRunning(): Promise<boolean>
+
+export async function ensureDaemon(): Promise<void>
+// If daemon not running, spawn gmax watch --daemon
+// If running, return immediately
+```
+
+Uses `net.createConnection({ path: SOCKET_PATH })` to connect.
+ECONNREFUSED → daemon is dead, spawn a new one.
+
+### 5.4 Update callers
+
+| Caller | Current | After |
+|--------|---------|-------|
+| `gmax add` | `launchWatcher(root)` | `ensureDaemon()` then `sendDaemonCommand({cmd: "watch", root})` |
+| `gmax remove` | kill watcher PID | `sendDaemonCommand({cmd: "unwatch", root})` |
+| `gmax index` | stop/restart per-project watcher | `sendDaemonCommand({cmd: "unwatch", root})`, index, then `sendDaemonCommand({cmd: "watch", root})` |
+| MCP `ensureWatcher` | spawn per-project watcher | `ensureDaemon()` (daemon watches all registered) |
+| SessionStart hook | `gmax watch -b` | `gmax watch --daemon` (if not already running) |
+| `gmax watch status` | list per-project watchers | `sendDaemonCommand({cmd: "status"})` |
+| `gmax watch stop` | kill per-project PID | `sendDaemonCommand({cmd: "shutdown"})` or kill daemon PID |
+
+### 5.5 Backward compat
+
+- `gmax watch --path <root> -b` still works for single-project mode
+- `gmax watch --daemon` is the new multi-project mode
+- `launchWatcher()` updated to prefer daemon mode: try IPC first,
+  fall back to per-project spawn if daemon unavailable
+
+### 5.6 Worker pool sharing
+
+One worker pool (piscina) serves all projects. File processing results
+are tagged with the project root (already the case — vectors store
+absolute paths). No change to the embedding pipeline.
+
+### 5.7 Files to create/modify
+
+| File | Action |
+|------|--------|
+| `src/lib/utils/daemon-client.ts` | NEW — IPC client |
+| `src/commands/watch.ts` | MODIFY — add `--daemon` mode with socket server |
+| `src/lib/utils/watcher-launcher.ts` | MODIFY — prefer daemon, fallback to per-project |
+| `src/commands/add.ts` | MODIFY — use daemon client |
+| `src/commands/remove.ts` | MODIFY — use daemon client |
+| `src/commands/index.ts` | MODIFY — use daemon client for stop/restart |
+| `src/commands/mcp.ts` | MODIFY — ensureWatcher uses ensureDaemon |
+| `plugins/grepmax/hooks/start.js` | MODIFY — start daemon, not per-project watcher |
+| `src/lib/index/watcher.ts` | MODIFY — support multiple project roots |
+
+### 5.8 Verification
+
+1. `gmax add ~/proj1 && gmax add ~/proj2` → one daemon, two projects watched
+2. `gmax watch status` → shows daemon PID with both roots
+3. Kill daemon → next `gmax search` restarts it automatically
+4. `gmax remove ~/proj1` → daemon unwatches, continues watching proj2
+5. `gmax watch stop` → daemon shuts down cleanly, socket removed
+6. Two Claude sessions → both connect to same daemon
+7. `ps aux | grep gmax` → only one watcher process regardless of project count
 
 ---
 
