@@ -77,6 +77,42 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Audit the npm tarball to ensure no source code or internal files leak.
+      #
+      # Why this exists: In March 2025, a major project accidentally shipped
+      # its entire internal source tree through npm because the package.json
+      # "files" whitelist was too broad. Internal feature flags, security
+      # architecture details, employee-only code paths, and A/B test
+      # infrastructure were all publicly readable on the registry.
+      #
+      # Our "files" field in package.json whitelists: dist/, plugins/,
+      # mlx-embed-server/, and scripts/postinstall.js. This step verifies
+      # that ONLY those paths end up in the tarball. If something unexpected
+      # appears — a src/ file, a .env, test fixtures, internal docs — this
+      # fails the release before it reaches the registry.
+      #
+      # Run `npm pack --dry-run` locally to preview what would ship.
+      - name: Audit npm tarball for source leaks
+        run: |
+          # Extract just the file paths from npm pack output (lines with a size like "8.2kB")
+          FILES=$(npm pack --dry-run 2>&1 | sed -n 's/^npm notice [0-9][0-9.]*[kMG]*B[[:space:]]*//p')
+          LEAKED=""
+          while IFS= read -r FILE; do
+            [ -z "$FILE" ] && continue
+            case "$FILE" in
+              dist/*|plugins/*|mlx-embed-server/*|scripts/postinstall.js|package.json|README.md|LICENSE|NOTICE) ;;
+              *) LEAKED="${LEAKED}  - ${FILE}\n" ;;
+            esac
+          done <<< "$FILES"
+          if [ -n "$LEAKED" ]; then
+            printf "ERROR: Unexpected files in npm tarball:\n%b" "$LEAKED"
+            echo ""
+            echo "If these files are intentional, add them to the case pattern"
+            echo "in this workflow step and to \"files\" in package.json."
+            exit 1
+          fi
+          echo "Tarball audit passed — no unexpected files."
+
       - name: Publish to npm
         run: pnpm publish --access public --provenance --no-git-checks
         env:
