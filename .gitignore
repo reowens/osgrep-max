@@ -40,3 +40,4 @@ src/bench/generate-benchmark-chart.ts
 # Python
 __pycache__/
 .venv/
+.gmax.json
