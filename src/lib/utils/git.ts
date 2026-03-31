@@ -60,8 +60,8 @@ export function getChangedFiles(
   try {
     let output: string;
     if (ref) {
-      // Changes between ref and HEAD (committed) + uncommitted
-      output = execSync(`git diff --name-only ${ref} && git diff --name-only`, opts);
+      // Changes between ref and current state (committed + uncommitted)
+      output = execSync(`git diff --name-only ${ref}`, opts);
     } else {
       // Uncommitted changes (staged + unstaged)
       output = execSync("git diff --name-only HEAD && git diff --name-only --cached", opts);

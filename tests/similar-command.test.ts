@@ -122,4 +122,26 @@ describe("similar command", () => {
     expect(spy).toHaveBeenCalledWith("No similar code found for handleAuth.");
     spy.mockRestore();
   });
+
+  it("uses agent format with --agent", async () => {
+    mockQueryChain.toArray.mockResolvedValueOnce([
+      { vector: new Float32Array(384), path: "/tmp/project/src/auth.ts", defined_symbols: ["handleAuth"], start_line: 10 },
+    ]);
+    const vsChain = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn(async () => [
+        { path: "/tmp/project/src/session.ts", start_line: 20, defined_symbols: ["handleSession"], role: "ORCH", _distance: 0.1 },
+      ]),
+    };
+    mockVectorSearch.mockReturnValue(vsChain);
+
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await (similar as Command).parseAsync(["handleAuth", "--agent"], { from: "user" });
+    const output = spy.mock.calls.map((c) => c[0]).join("\n");
+    expect(output).toContain("d=0.100");
+    expect(output).not.toContain("similar to");
+    spy.mockRestore();
+  });
 });

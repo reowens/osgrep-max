@@ -90,4 +90,27 @@ describe("diff command", () => {
     expect(output).toContain("handleAuth");
     spy.mockRestore();
   });
+
+  it("uses agent format with --agent", async () => {
+    (getChangedFiles as ReturnType<typeof vi.fn>).mockReturnValue([
+      "/tmp/project/src/auth.ts",
+    ]);
+
+    const chain = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      toArray: vi.fn(async () => [
+        { defined_symbols: ["handleAuth"], role: "ORCHESTRATION", start_line: 10 },
+      ]),
+    };
+    mockTable.query.mockReturnValue(chain);
+
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await (diff as Command).parseAsync(["--agent"], { from: "user" });
+    const output = spy.mock.calls.map((c) => c[0]).join("\n");
+    expect(output).toContain("src/auth.ts");
+    expect(output).not.toContain("changed file");
+    spy.mockRestore();
+  });
 });
