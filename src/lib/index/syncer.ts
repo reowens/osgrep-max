@@ -539,7 +539,7 @@ export async function initialSync(
         total,
         filePath: "Creating FTS index...",
       });
-      await vectorDb.createFTSIndex();
+      await vectorDb.runMaintenance();
       ftsTimer();
     }
 

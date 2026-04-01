@@ -67,10 +67,9 @@ export class ProjectBatchProcessor {
     this.ftsInterval = setInterval(async () => {
       if (this.closed || this.processing) return;
       try {
-        await this.vectorDb.createFTSIndex();
-        await this.vectorDb.optimize();
+        await this.vectorDb.runMaintenance();
       } catch (err) {
-        console.error(`[${this.wtag}] FTS rebuild / compaction failed:`, err);
+        console.error(`[${this.wtag}] Maintenance failed:`, err);
       }
     }, FTS_REBUILD_INTERVAL_MS);
     this.ftsInterval.unref();
