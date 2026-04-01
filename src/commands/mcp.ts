@@ -130,6 +130,7 @@ const TOOLS = [
     name: "index_status",
     description: "Index health: chunks, files, projects, watcher status.",
     inputSchema: { type: "object" as const, properties: {} },
+    _meta: { "anthropic/alwaysLoad": true },
   },
   {
     name: "summarize_directory",
