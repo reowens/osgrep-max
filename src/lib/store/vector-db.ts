@@ -492,7 +492,12 @@ export class VectorDB {
     this.unregisterCleanup?.();
     this.unregisterCleanup = undefined;
     if (this.db) {
-      if (this.db.close) await this.db.close();
+      if (this.db.close) {
+        await Promise.race([
+          this.db.close(),
+          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+        ]);
+      }
     }
     this.db = null;
   }
