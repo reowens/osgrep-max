@@ -1,57 +1,10 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 
-const SKILL = `
----
-name: gmax
-description: Semantic code search and call-graph tracing for AI agents. Finds code by concept, surfaces roles (ORCHESTRATION vs DEFINITION), and traces dependencies.
-allowed-tools: "Bash(gmax:*), Read"
-license: Apache-2.0
----
-
-## ⚠️ CRITICAL: Handling "Indexing" State
-If any \`gmax\` command returns a status indicating **"Indexing"**, **"Building"**, or **"Syncing"**:
-1. **STOP** your current train of thought.
-2. **INFORM** the user: "The semantic index is currently building. Search results will be incomplete."
-3. **ASK**: "Do you want me to proceed with partial results, or wait for indexing to finish?"
-   *(Do not assume you should proceed without confirmation).*
-
-## Core Commands
-- Search: \`gmax "how does auth work" --compact\`
-- Trace: \`gmax trace "AuthService"\`
-- Symbols: \`gmax symbols "Auth"\`
-
-## Output (Default = Compact TSV)
-- One line per hit: \`path\\tlines\\tscore\\trole\\tconf\\tdefined\\tpreview\`
-- Roles: \`ORCH\` (Orchestration), \`DEF\` (Definition), \`IMPL\` (Implementation).
-- **Note:** If output is empty but valid, say "No semantic matches found."
-
-## Typical Workflow
-
-1. **Discover**
-   \`\`\`bash
-   gmax "worker pool lifecycle" --compact
-   \`\`\`
-
-2. **Explore**
-   \`\`\`bash
-   gmax symbols Worker
-   \`\`\`
-
-3. **Trace**
-   \`\`\`bash
-   gmax trace WorkerPool
-   \`\`\`
-
-4. **Read**
-   \`\`\`bash
-   Read src/lib/workers/pool.ts:112-186
-   \`\`\`
-`;
-
-// --- DROID CONFIG UTILS ---
+// --- Config Utils ---
 
 type HookCommand = { type: "command"; command: string; timeout: number };
 type HookEntry = { matcher?: string | null; hooks: HookCommand[] };
@@ -70,6 +23,44 @@ function resolveDroidRoot(): string {
     );
   }
   return root;
+}
+
+function resolveGmaxBin(): string {
+  try {
+    return execSync("which gmax", { encoding: "utf-8", stdio: "pipe" }).trim();
+  } catch {
+    const binDir = path.dirname(process.argv[1]);
+    const candidate = path.join(binDir, "gmax");
+    if (fs.existsSync(candidate)) return candidate;
+    return "gmax";
+  }
+}
+
+function getPackageRoot(): string {
+  return path.resolve(__dirname, "../..");
+}
+
+function loadSkill(): string {
+  const skillPath = path.join(
+    getPackageRoot(),
+    "plugins",
+    "grepmax",
+    "skills",
+    "grepmax",
+    "SKILL.md",
+  );
+  try {
+    return fs.readFileSync(skillPath, "utf-8");
+  } catch {
+    return [
+      "---",
+      "name: gmax",
+      "description: Semantic code search.",
+      "---",
+      "",
+      'Use `gmax "query" --agent` for semantic search.',
+    ].join("\n");
+  }
 }
 
 function writeFileIfChanged(filePath: string, content: string): void {
@@ -115,7 +106,6 @@ function mergeHooks(
   for (const [event, entries] of Object.entries(incoming)) {
     const current = merged[event] || [];
     for (const entry of entries) {
-      // Simple duplicate check based on command string
       const cmd = entry.hooks[0].command;
       if (!current.some((c: any) => c.hooks[0].command === cmd)) {
         current.push(entry);
@@ -126,42 +116,62 @@ function mergeHooks(
   return merged;
 }
 
-// --- MAIN INSTALLER ---
+// --- Installer ---
 
 async function installPlugin() {
   const root = resolveDroidRoot();
+  const gmaxBin = resolveGmaxBin();
   const hooksDir = path.join(root, "hooks", "gmax");
   const skillsDir = path.join(root, "skills", "gmax");
   const settingsPath = path.join(root, "settings.json");
 
-  // 1. Install Hook Scripts (Start/Stop Daemon)
-  // We expect these files to exist in your dist/hooks folder
+  // 1. Install hook scripts (start/stop daemon)
+  const startScript = `
+const { execFileSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+
+const BIN = "${gmaxBin}";
+
+function resolveGmax() {
+  if (fs.existsSync(BIN)) return BIN;
+  try {
+    return require("child_process").execSync("which gmax", { encoding: "utf-8" }).trim();
+  } catch { return null; }
+}
+
+function isProjectRegistered() {
+  try {
+    const projectsPath = path.join(os.homedir(), ".gmax", "projects.json");
+    const projects = JSON.parse(fs.readFileSync(projectsPath, "utf-8"));
+    const cwd = process.cwd();
+    return projects.some((p) => cwd.startsWith(p.root));
+  } catch { return false; }
+}
+
+const bin = resolveGmax();
+if (bin && isProjectRegistered()) {
+  try { execFileSync(bin, ["watch", "--daemon", "-b"], { timeout: 5000, stdio: "ignore" }); } catch {}
+}
+`.trim();
+
+  const stopScript = `
+const { execFileSync } = require("child_process");
+try { execFileSync("gmax", ["watch", "stop", "--all"], { stdio: "ignore", timeout: 5000 }); } catch {}
+`.trim();
+
   const startJsPath = path.join(hooksDir, "gmax_start.js");
   const stopJsPath = path.join(hooksDir, "gmax_stop.js");
 
-  // Create these scripts dynamically if we don't want to read from dist
-  const startScript = `
-const { spawn } = require("child_process");
-const fs = require("fs");
-const path = require("path");
-const logDir = path.join(require("os").homedir(), ".gmax", "logs");
-fs.mkdirSync(logDir, { recursive: true });
-const out = fs.openSync(path.join(logDir, "gmax.log"), "a");
-const child = spawn("gmax", ["serve"], { detached: true, stdio: ["ignore", out, out] });
-child.unref();
-`;
-  const stopScript = `
-const { spawnSync, execSync } = require("child_process");
-try { execSync("gmax serve stop", { stdio: "ignore" }); } catch {}
-`;
+  writeFileIfChanged(startJsPath, startScript);
+  writeFileIfChanged(stopJsPath, stopScript);
 
-  writeFileIfChanged(startJsPath, startScript.trim());
-  writeFileIfChanged(stopJsPath, stopScript.trim());
+  // 2. Install SKILL (read from package root)
+  const skill = loadSkill();
+  writeFileIfChanged(path.join(skillsDir, "SKILL.md"), skill.trim());
 
-  // 2. Install Skill (with Indexing Warning)
-  writeFileIfChanged(path.join(skillsDir, "SKILL.md"), SKILL.trimStart());
-
-  // 3. Configure Settings
+  // 3. Configure settings
   const hookConfig: HooksConfig = {
     SessionStart: [
       {
@@ -186,7 +196,7 @@ try { execSync("gmax serve stop", { stdio: "ignore" }); } catch {}
   settings.hooks = mergeHooks(settings.hooks as HooksConfig, hookConfig);
   saveSettings(settingsPath, settings);
 
-  console.log(`✅ gmax installed for Factory Droid (Hooks + Skill)`);
+  console.log("✅ gmax installed for Factory Droid (Hooks + Skill)");
 }
 
 async function uninstallPlugin() {

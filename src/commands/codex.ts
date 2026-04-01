@@ -9,48 +9,84 @@ const shell =
   process.env.SHELL || (process.platform === "win32" ? "cmd.exe" : "/bin/sh");
 const execAsync = promisify(exec);
 
-const SKILL = `
----
-name: gmax
-description: Semantic code search and call-graph tracing via gmax.
----
+const AGENTS_PATH = path.join(os.homedir(), ".codex", "AGENTS.md");
+const SKILL_START = "<!-- gmax:start -->";
+const SKILL_END = "<!-- gmax:end -->";
 
-## ⚠️ CRITICAL: Handling "Indexing" State
-If the tool output says **"Indexing"**, **"Building"**, or **"Syncing"**:
-1. **STOP.** Do not hallucinate results.
-2. **INFORM** the user: "The semantic index is still building. Results are partial."
-3. **ASK** if they want to proceed or wait.
+function getPackageRoot(): string {
+  return path.resolve(__dirname, "../..");
+}
 
-## Commands
-- Search: \`gmax "auth logic" --compact\`
-- Trace: \`gmax trace "AuthService"\`
-`;
+function loadSkill(): string {
+  const skillPath = path.join(
+    getPackageRoot(),
+    "plugins",
+    "grepmax",
+    "skills",
+    "grepmax",
+    "SKILL.md",
+  );
+  try {
+    return fs.readFileSync(skillPath, "utf-8");
+  } catch {
+    return [
+      "---",
+      "name: gmax",
+      "description: Semantic code search. Use alongside grep - grep for exact strings, gmax for concepts.",
+      "---",
+      "",
+      'Use `gmax "query" --agent` for semantic search.',
+    ].join("\n");
+  }
+}
+
+function writeSkillToAgents(skill: string): void {
+  fs.mkdirSync(path.dirname(AGENTS_PATH), { recursive: true });
+
+  const block = `${SKILL_START}\n${skill.trim()}\n${SKILL_END}`;
+
+  if (!fs.existsSync(AGENTS_PATH)) {
+    fs.writeFileSync(AGENTS_PATH, block);
+    return;
+  }
+
+  const content = fs.readFileSync(AGENTS_PATH, "utf-8");
+
+  // Check if file has any gmax content (markers or legacy)
+  if (content.includes("gmax")) {
+    // Remove all gmax content and rewrite with just our block
+    const markerRe = new RegExp(
+      `\n?${SKILL_START}[\\s\\S]*?${SKILL_END}\n?`,
+      "g",
+    );
+    const cleaned = content.replace(markerRe, "");
+    // Remove legacy content (everything between --- blocks mentioning gmax)
+    const withoutLegacy = cleaned.replace(
+      /---[\s\S]*?(?:gmax|--compact)[\s\S]*?(?=\n<!-- |$)/,
+      "",
+    ).trim();
+    fs.writeFileSync(
+      AGENTS_PATH,
+      withoutLegacy ? `${withoutLegacy}\n\n${block}` : block,
+    );
+  } else {
+    fs.writeFileSync(AGENTS_PATH, `${content.trim()}\n\n${block}`);
+  }
+}
 
 async function installPlugin() {
   try {
-    // 1. Register the MCP Tool
-    // 'gmax mcp' acts as the server.
+    // 1. Register MCP tool
     await execAsync("codex mcp add gmax gmax mcp", {
       shell,
       env: process.env,
     });
     console.log("✅ gmax MCP tool registered with Codex");
 
-    // 2. Add Instructions to AGENTS.md
-    const destPath = path.join(os.homedir(), ".codex", "AGENTS.md");
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-
-    const content = fs.existsSync(destPath)
-      ? fs.readFileSync(destPath, "utf-8")
-      : "";
-
-    // Only append if not present
-    if (!content.includes("name: gmax")) {
-      fs.appendFileSync(destPath, `\n${SKILL}`);
-      console.log("✅ gmax skill instructions added to Codex");
-    } else {
-      console.log("ℹ️  gmax skill instructions already present");
-    }
+    // 2. Write SKILL to AGENTS.md (idempotent)
+    const skill = loadSkill();
+    writeSkillToAgents(skill);
+    console.log("✅ gmax skill instructions written to", AGENTS_PATH);
   } catch (error) {
     console.error(`❌ Error installing Codex plugin: ${error}`);
     process.exit(1);
@@ -61,18 +97,20 @@ async function uninstallPlugin() {
   try {
     await execAsync("codex mcp remove gmax", { shell, env: process.env });
     console.log("✅ gmax MCP tool removed");
-  } catch (_e) {
+  } catch {
     /* ignore if not found */
   }
 
-  const destPath = path.join(os.homedir(), ".codex", "AGENTS.md");
-  if (fs.existsSync(destPath)) {
-    let content = fs.readFileSync(destPath, "utf-8");
-    // Naive removal: strictly matches the block we added.
-    // For robust removal, you might need regex, but this works if the string is exact.
-    if (content.includes(SKILL)) {
-      content = content.replace(SKILL, "").trim();
-      fs.writeFileSync(destPath, content);
+  if (fs.existsSync(AGENTS_PATH)) {
+    let content = fs.readFileSync(AGENTS_PATH, "utf-8");
+    // Remove marked block
+    const markerRe = new RegExp(
+      `\n?${SKILL_START}[\\s\\S]*?${SKILL_END}\n?`,
+      "g",
+    );
+    if (markerRe.test(content)) {
+      content = content.replace(markerRe, "").trim();
+      fs.writeFileSync(AGENTS_PATH, content || "");
       console.log("✅ gmax instructions removed from AGENTS.md");
     }
   }
