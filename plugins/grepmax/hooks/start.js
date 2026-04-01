@@ -42,7 +42,7 @@ function findMlxServerDir() {
   return null;
 }
 
-function startPythonServer(serverDir, scriptName, logName) {
+function startPythonServer(serverDir, scriptName, logName, processName) {
   if (!serverDir) return;
 
   const logDir = _path.join(require("node:os").homedir(), ".gmax", "logs");
@@ -63,7 +63,12 @@ function startPythonServer(serverDir, scriptName, logName) {
     cwd: serverDir,
     detached: true,
     stdio: ["ignore", out, out],
-    env: { ...process.env, VIRTUAL_ENV: "", CONDA_DEFAULT_ENV: "" },
+    env: {
+      ...process.env,
+      VIRTUAL_ENV: "",
+      CONDA_DEFAULT_ENV: "",
+      GMAX_PROCESS_NAME: processName || logName,
+    },
   });
   child.unref();
 }
@@ -105,12 +110,12 @@ async function main() {
 
     // Start MLX embed server (port 8100)
     if (serverDir && !(await isServerRunning(8100))) {
-      startPythonServer(serverDir, "server.py", "mlx-embed-server");
+      startPythonServer(serverDir, "server.py", "mlx-embed-server", "gmax-embed");
     }
 
     // Start LLM summarizer server (port 8101) — opt-in only
     if (process.env.GMAX_SUMMARIZER === "1" && serverDir && !(await isServerRunning(8101))) {
-      startPythonServer(serverDir, "summarizer.py", "mlx-summarizer");
+      startPythonServer(serverDir, "summarizer.py", "mlx-summarizer", "gmax-summarizer");
     }
   }
 

@@ -148,6 +148,14 @@ async def health():
 
 
 def main():
+    # Set process name for Activity Monitor
+    proc_name = os.environ.get("GMAX_PROCESS_NAME", "gmax-embed")
+    try:
+        from setproctitle import setproctitle
+        setproctitle(proc_name)
+    except ImportError:
+        pass
+
     # Bail early if port is already taken
     if is_port_in_use(PORT):
         print(f"[mlx-embed] Port {PORT} already in use — server is already running.")

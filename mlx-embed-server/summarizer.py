@@ -163,6 +163,14 @@ async def health():
 
 
 def main():
+    # Set process name for Activity Monitor
+    proc_name = os.environ.get("GMAX_PROCESS_NAME", "gmax-summarizer")
+    try:
+        from setproctitle import setproctitle
+        setproctitle(proc_name)
+    except ImportError:
+        pass
+
     if is_port_in_use(PORT):
         print(f"[summarizer] Port {PORT} already in use — server is already running.")
         return
