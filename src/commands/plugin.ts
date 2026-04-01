@@ -94,7 +94,7 @@ function getClients(): Client[] {
       isInstalled: () => {
         const p = path.join(os.homedir(), ".codex", "AGENTS.md");
         try {
-          return fs.existsSync(p) && fs.readFileSync(p, "utf-8").includes("name: gmax");
+          return fs.existsSync(p) && fs.readFileSync(p, "utf-8").includes("gmax");
         } catch {
           return false;
         }
