@@ -14,7 +14,7 @@ import {
 } from "apache-arrow";
 import { CONFIG } from "../../config";
 import { escapeSqlString } from "../utils/filter-builder";
-import { log } from "../utils/logger";
+import { debug, log, timer } from "../utils/logger";
 import { registerCleanup } from "../utils/cleanup";
 import type { VectorRecord } from "./types";
 
@@ -25,6 +25,7 @@ export class VectorDB {
   private unregisterCleanup?: () => void;
   private closed = false;
   private readonly vectorDim: number;
+  private maintenanceRunning = false;
 
   constructor(
     private lancedbDir: string,
@@ -282,17 +283,74 @@ export class VectorDB {
     }
   }
 
-  async optimize(): Promise<void> {
+  async optimize(retries = 3): Promise<void> {
     const table = await this.ensureTable();
-    try {
-      await table.optimize({
-        cleanupOlderThan: new Date(),
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!msg.includes("Nothing to do")) {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const done = timer("vectordb", "optimize");
+        const stats = await table.optimize({
+          cleanupOlderThan: cutoff,
+          deleteUnverified: true,
+        });
+        done();
+
+        const { compaction, prune } = stats;
+        if (
+          compaction.fragmentsRemoved > 0 ||
+          prune.oldVersionsRemoved > 0 ||
+          prune.bytesRemoved > 0
+        ) {
+          log(
+            "vectordb",
+            `Compacted: ${compaction.fragmentsRemoved} frags → ${compaction.fragmentsAdded}, ` +
+              `pruned ${prune.oldVersionsRemoved} versions, ` +
+              `freed ${(prune.bytesRemoved / 1024 / 1024).toFixed(1)}MB`,
+          );
+        } else {
+          debug("vectordb", "Optimize: nothing to compact or prune");
+        }
+        return;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("Nothing to do")) {
+          debug("vectordb", "Optimize: nothing to do");
+          return;
+        }
+        if (
+          attempt < retries &&
+          (msg.includes("conflict") || msg.includes("Retryable"))
+        ) {
+          const delay = 1000 * 2 ** (attempt - 1);
+          log(
+            "vectordb",
+            `Optimize conflict (attempt ${attempt}/${retries}), retrying in ${delay}ms`,
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
         log("vectordb", `Optimize failed: ${msg}`);
+        return;
       }
+    }
+  }
+
+  /**
+   * Run FTS rebuild + optimize as a single serialized operation.
+   * Safe to call from multiple project processors — only one runs at a time.
+   */
+  async runMaintenance(): Promise<void> {
+    if (this.maintenanceRunning) {
+      debug("vectordb", "Maintenance already running, skipping");
+      return;
+    }
+    this.maintenanceRunning = true;
+    try {
+      await this.createFTSIndex();
+      await this.optimize();
+    } finally {
+      this.maintenanceRunning = false;
     }
   }
 
