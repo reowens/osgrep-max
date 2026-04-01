@@ -1,7 +1,7 @@
 ---
 name: grepmax
 description: Semantic code search. Use alongside grep - grep for exact strings, gmax for concepts.
-allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__code_skeleton, mcp__grepmax__trace_calls, mcp__grepmax__list_symbols, mcp__grepmax__index_status, mcp__grepmax__summarize_directory, mcp__grepmax__summarize_project, mcp__grepmax__related_files, mcp__grepmax__recent_changes, Bash(gmax:*), Read"
+allowed-tools: "Bash(gmax:*), Read"
 ---
 
 ## When to use what
@@ -14,19 +14,17 @@ allowed-tools: "mcp__grepmax__semantic_search, mcp__grepmax__code_skeleton, mcp_
 - **Need file structure?** → `Bash(gmax skeleton <path>)`
 - **Need call flow?** → `Bash(gmax trace <symbol>)`
 
-## IMPORTANT: Use CLI, not MCP tools
+## Quick start
 
-**Always prefer `Bash(gmax ...)` over MCP tool calls.** Use `--agent` for the most token-efficient search output (one line per result with signature hints).
+Use `--agent` for the most token-efficient output (one line per result with signature hints).
 
 ```
 Bash(gmax "auth handler" --role ORCHESTRATION --lang ts --agent -m 3)
 ```
 
-**Only use MCP tools** for `index_status` or `summarize_directory`. For everything else, use CLI.
-
 ## Project management
 
-Projects must be added before CLI search works. MCP tools auto-add on first use, but CLI requires an explicit step:
+Projects must be added before search works:
 
 ```
 gmax add                        # add + index current directory
@@ -206,10 +204,6 @@ gmax doctor                                # health check
 13. **Context** — `Bash(gmax context "topic" --budget 4000)` for a token-budgeted topic summary
 14. **Related** — `Bash(gmax related <file>)` to see what else to look at
 15. **Status** — `Bash(gmax status)` to check index state across all projects
-
-## MCP tools
-
-Use MCP only for `index_status` and `summarize_directory`. Use CLI for everything else. For cross-project search, use `scope: "all"` on semantic_search (replaces search_all).
 
 ## Tips
 
