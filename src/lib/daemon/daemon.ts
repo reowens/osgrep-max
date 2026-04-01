@@ -9,7 +9,7 @@ import { WATCHER_IGNORE_GLOBS } from "../index/watcher";
 import { MetaCache } from "../store/meta-cache";
 import { VectorDB } from "../store/vector-db";
 import { killProcess } from "../utils/process";
-import { listProjects } from "../utils/project-registry";
+import { getProject, listProjects, registerProject } from "../utils/project-registry";
 import {
   heartbeat,
   listWatchers,
@@ -167,6 +167,14 @@ export class Daemon {
         console.log(
           `[daemon:${path.basename(root)}] Reindexed ${files} file${files !== 1 ? "s" : ""} (${(ms / 1000).toFixed(1)}s)`,
         );
+        // Update project registry so gmax status shows fresh data
+        const proj = getProject(root);
+        if (proj) {
+          registerProject({
+            ...proj,
+            lastIndexed: new Date().toISOString(),
+          });
+        }
       },
       onActivity: () => {
         this.lastActivity = Date.now();
