@@ -1,6 +1,8 @@
 import { destroyWorkerPool, isWorkerPoolInitialized } from "../workers/pool";
 import { runCleanup } from "./cleanup";
 
+const EXIT_TIMEOUT_MS = 8_000;
+
 export async function gracefulExit(code?: number): Promise<void> {
   const finalCode =
     typeof code === "number"
@@ -8,6 +10,13 @@ export async function gracefulExit(code?: number): Promise<void> {
       : typeof process.exitCode === "number"
         ? process.exitCode
         : 0;
+
+  // Safety net: force-exit if cleanup hangs
+  const forceTimer =
+    !process.env.VITEST && process.env.NODE_ENV !== "test"
+      ? setTimeout(() => process.exit(finalCode), EXIT_TIMEOUT_MS)
+      : undefined;
+  if (forceTimer) forceTimer.unref();
 
   try {
     if (isWorkerPoolInitialized()) {
@@ -18,6 +27,8 @@ export async function gracefulExit(code?: number): Promise<void> {
   }
 
   await runCleanup();
+
+  if (forceTimer) clearTimeout(forceTimer);
 
   // Avoid exiting the process during test runs so Vitest can report results.
   if (process.env.VITEST || process.env.NODE_ENV === "test") {
