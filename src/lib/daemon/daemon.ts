@@ -38,6 +38,8 @@ export class Daemon {
   private readonly pendingOps = new Set<string>();
 
   async start(): Promise<void> {
+    process.title = "gmax-daemon";
+
     // 1. Kill existing per-project watchers
     const existing = listWatchers();
     for (const w of existing) {
