@@ -1,4 +1,5 @@
 import process from "node:process";
+process.title = "gmax-worker";
 import processFile, {
   encodeQuery,
   type ProcessFileInput,
