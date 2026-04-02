@@ -20,12 +20,15 @@ import type { VectorRecord } from "./types";
 
 const TABLE_NAME = "chunks";
 
+const MAINTENANCE_INTERVAL_MS = 5 * 60 * 1000;
+
 export class VectorDB {
   private db: lancedb.Connection | null = null;
   private unregisterCleanup?: () => void;
   private closed = false;
   private readonly vectorDim: number;
   private maintenanceRunning = false;
+  private maintenanceTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private lancedbDir: string,
@@ -33,6 +36,23 @@ export class VectorDB {
   ) {
     this.vectorDim = vectorDim ?? CONFIG.VECTOR_DIM;
     this.unregisterCleanup = registerCleanup(() => this.close());
+  }
+
+  /**
+   * Start a periodic maintenance timer (FTS rebuild + optimize).
+   * Call once from the daemon — replaces per-processor maintenance intervals.
+   */
+  startMaintenanceLoop(): void {
+    if (this.maintenanceTimer) return;
+    this.maintenanceTimer = setInterval(async () => {
+      if (this.closed) return;
+      try {
+        await this.runMaintenance();
+      } catch (err) {
+        log("vectordb", `Periodic maintenance failed: ${err}`);
+      }
+    }, MAINTENANCE_INTERVAL_MS);
+    this.maintenanceTimer.unref();
   }
 
   private async getDb(): Promise<lancedb.Connection> {
@@ -356,6 +376,7 @@ export class VectorDB {
   /**
    * Run FTS rebuild + optimize as a single serialized operation.
    * Safe to call from multiple project processors — only one runs at a time.
+   * Checks disk bloat ratio and retries optimize when bloat persists.
    */
   async runMaintenance(): Promise<void> {
     if (this.maintenanceRunning) {
@@ -366,9 +387,44 @@ export class VectorDB {
     try {
       await this.createFTSIndex();
       await this.optimize();
+
+      // Check for bloat after first optimize pass — if fragments were locked
+      // by concurrent readers, optimize succeeds but skips them. A second pass
+      // after a brief pause catches what the first couldn't.
+      const table = await this.ensureTable();
+      const stats = await table.stats();
+      const diskSize = this.getDirectorySize(this.lancedbDir);
+      const logicalSize = stats.totalBytes;
+      const bloatRatio = logicalSize > 0 ? diskSize / logicalSize : 0;
+
+      if (bloatRatio > 2.0) {
+        log(
+          "vectordb",
+          `Bloat detected after optimize: ${(diskSize / 1024 / 1024).toFixed(0)}MB disk vs ${(logicalSize / 1024 / 1024).toFixed(0)}MB logical (${bloatRatio.toFixed(1)}x) — retrying`,
+        );
+        await new Promise((r) => setTimeout(r, 2000));
+        await this.optimize();
+      }
     } finally {
       this.maintenanceRunning = false;
     }
+  }
+
+  private getDirectorySize(dirPath: string): number {
+    let totalSize = 0;
+    try {
+      const items = fs.readdirSync(dirPath);
+      for (const item of items) {
+        const itemPath = `${dirPath}/${item}`;
+        const s = fs.statSync(itemPath);
+        if (s.isDirectory()) {
+          totalSize += this.getDirectorySize(itemPath);
+        } else {
+          totalSize += s.size;
+        }
+      }
+    } catch {}
+    return totalSize;
   }
 
   async hasAnyRows(): Promise<boolean> {
@@ -489,6 +545,10 @@ export class VectorDB {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    if (this.maintenanceTimer) {
+      clearInterval(this.maintenanceTimer);
+      this.maintenanceTimer = null;
+    }
     this.unregisterCleanup?.();
     this.unregisterCleanup = undefined;
     if (this.db) {

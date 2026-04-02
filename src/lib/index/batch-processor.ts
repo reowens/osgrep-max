@@ -21,7 +21,6 @@ export interface BatchProcessorOptions {
 }
 
 const DEBOUNCE_MS = 2000;
-const FTS_REBUILD_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_RETRIES = 5;
 
 export class ProjectBatchProcessor {
@@ -41,7 +40,6 @@ export class ProjectBatchProcessor {
   private closed = false;
   private consecutiveLockFailures = 0;
   private currentBatchAc: AbortController | null = null;
-  private readonly ftsInterval: ReturnType<typeof setInterval>;
 
   constructor(opts: BatchProcessorOptions) {
     this.projectRoot = opts.projectRoot;
@@ -64,20 +62,6 @@ export class ProjectBatchProcessor {
       120_000,
     );
 
-    this.ftsInterval = setInterval(async () => {
-      if (this.closed || this.processing) return;
-      this.processing = true;
-      try {
-        await this.vectorDb.runMaintenance();
-      } catch (err) {
-        console.error(`[${this.wtag}] Maintenance failed:`, err);
-      } finally {
-        this.processing = false;
-        // Process any events that queued during maintenance
-        if (this.pending.size > 0) this.scheduleBatch();
-      }
-    }, FTS_REBUILD_INTERVAL_MS);
-    this.ftsInterval.unref();
   }
 
   handleFileEvent(event: "change" | "unlink", absPath: string): void {
@@ -95,7 +79,6 @@ export class ProjectBatchProcessor {
     this.closed = true;
     this.currentBatchAc?.abort();
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    clearInterval(this.ftsInterval);
   }
 
   private scheduleBatch(): void {

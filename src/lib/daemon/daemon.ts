@@ -77,6 +77,7 @@ export class Daemon {
       fs.mkdirSync(PATHS.cacheDir, { recursive: true });
       fs.mkdirSync(PATHS.lancedbDir, { recursive: true });
       this.vectorDb = new VectorDB(PATHS.lancedbDir);
+      this.vectorDb.startMaintenanceLoop();
       this.metaCache = new MetaCache(PATHS.lmdbPath);
     } catch (err) {
       console.error("[daemon] Failed to open shared resources:", err);
