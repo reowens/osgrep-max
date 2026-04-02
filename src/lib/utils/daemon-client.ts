@@ -73,6 +73,24 @@ export async function isDaemonRunning(): Promise<boolean> {
   return resp.ok === true;
 }
 
+/**
+ * Ensure the daemon is running — start it if needed, poll up to 5s.
+ * Returns true if daemon is ready, false if it couldn't be started.
+ */
+export async function ensureDaemonRunning(): Promise<boolean> {
+  if (await isDaemonRunning()) return true;
+
+  const { spawnDaemon } = await import("./daemon-launcher");
+  const pid = spawnDaemon();
+  if (!pid) return false;
+
+  for (let i = 0; i < 25; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    if (await isDaemonRunning()) return true;
+  }
+  return false;
+}
+
 // --- Streaming IPC for long-running commands ---
 
 export interface StreamingProgress {

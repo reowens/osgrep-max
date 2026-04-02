@@ -89,9 +89,9 @@ Examples:
       // Ensure grammars are present before indexing (silent if already exist)
       await ensureGrammars(console.log, { silent: true });
 
-      const { isDaemonRunning, sendStreamingCommand } = await import("../lib/utils/daemon-client");
+      const { ensureDaemonRunning, sendStreamingCommand } = await import("../lib/utils/daemon-client");
 
-      if (await isDaemonRunning()) {
+      if (await ensureDaemonRunning()) {
         // Daemon mode: IPC streaming — daemon handles watcher pause/resume internally
         const { spinner, onProgress } = createIndexingSpinner(
           projectRoot,

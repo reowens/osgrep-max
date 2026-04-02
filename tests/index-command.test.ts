@@ -81,6 +81,7 @@ vi.mock("../src/lib/utils/watcher-launcher", () => ({
 
 vi.mock("../src/lib/utils/daemon-client", () => ({
   isDaemonRunning: vi.fn(async () => false),
+  ensureDaemonRunning: vi.fn(async () => false),
   sendStreamingCommand: vi.fn(),
 }));
 

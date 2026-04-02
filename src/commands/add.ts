@@ -103,7 +103,7 @@ Examples:
         `Adding ${projectName}...`,
       );
 
-      const { isDaemonRunning, sendStreamingCommand } = await import("../lib/utils/daemon-client");
+      const { ensureDaemonRunning, sendStreamingCommand } = await import("../lib/utils/daemon-client");
       const pendingEntry = {
         root: projectRoot,
         name: projectName,
@@ -115,7 +115,7 @@ Examples:
         status: "error" as const,
       };
 
-      if (await isDaemonRunning()) {
+      if (await ensureDaemonRunning()) {
         // Daemon mode: IPC streaming
         try {
           const done = await sendStreamingCommand(

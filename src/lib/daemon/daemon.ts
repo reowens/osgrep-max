@@ -304,6 +304,9 @@ export class Daemon {
         return;
       }
 
+      const ac = new AbortController();
+      conn.on("close", () => ac.abort());
+
       this.vectorDb.pauseMaintenanceLoop();
       let lastProgressTime = 0;
       try {
@@ -311,6 +314,7 @@ export class Daemon {
           projectRoot: root,
           vectorDb: this.vectorDb,
           metaCache: this.metaCache,
+          signal: ac.signal,
           onProgress: (info) => {
             this.resetActivity();
             const now = Date.now();
@@ -367,6 +371,9 @@ export class Daemon {
         this.subscriptions.delete(root);
       }
 
+      const ac = new AbortController();
+      conn.on("close", () => ac.abort());
+
       this.vectorDb.pauseMaintenanceLoop();
       let lastProgressTime = 0;
       try {
@@ -376,6 +383,7 @@ export class Daemon {
           dryRun: opts.dryRun,
           vectorDb: this.vectorDb,
           metaCache: this.metaCache,
+          signal: ac.signal,
           onProgress: (info) => {
             this.resetActivity();
             const now = Date.now();
