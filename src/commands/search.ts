@@ -1139,3 +1139,4 @@ Examples:
       await gracefulExit();
     }
   });
+// sentinel hook test
