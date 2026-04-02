@@ -175,6 +175,14 @@ gmax context "payment flow" --budget 8000
 gmax context src/lib/auth/ --budget 3000
 ```
 
+### Investigate — `gmax investigate "question"` (requires LLM)
+```
+gmax investigate "how does authentication work?"
+gmax investigate "what would break if I changed VectorDB?" -v
+gmax investigate "where are API routes defined?" --root ~/project --rounds 5
+```
+Agentic Q&A: a local LLM autonomously uses gmax tools (search, trace, peek, impact, related) to gather evidence and answer. Requires `gmax llm on && gmax llm start`. Use `-v` to see tool calls and reasoning.
+
 ### Other
 ```
 gmax status                                # show all indexed projects
@@ -185,6 +193,7 @@ gmax project --agent                       # compact: key\tvalue pairs
 gmax index                                 # reindex current directory
 gmax config                                # view/change settings
 gmax doctor                                # health check
+gmax llm on/off/start/stop/status          # manage local LLM server
 ```
 
 ## Workflow

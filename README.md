@@ -174,6 +174,37 @@ gmax status                   # See all projects + watcher status
 
 The daemon auto-starts when you run `gmax add`, `gmax index`, `gmax remove`, or `gmax summarize`. It shuts down after 30 minutes of inactivity.
 
+## Local LLM (optional)
+
+gmax can use a local LLM (via llama-server) for agentic codebase investigation. This is entirely opt-in and disabled by default — gmax works fine without it.
+
+```bash
+gmax llm on                   # Enable LLM features (persists to config)
+gmax llm start                # Start llama-server (auto-starts daemon too)
+gmax llm status               # Check server status
+gmax llm stop                 # Stop llama-server
+gmax llm off                  # Disable LLM + stop server
+```
+
+### Investigate
+
+Ask questions about your codebase — the LLM autonomously uses gmax tools (search, trace, peek, impact, related) to gather evidence and synthesize an answer.
+
+```bash
+gmax investigate "how does authentication work?"
+gmax investigate "what would break if I changed VectorDB?" -v
+gmax investigate "where are API routes defined?" --root ~/project
+```
+
+### LLM Configuration
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `GMAX_LLM_MODEL` | Path to GGUF model file | (none) |
+| `GMAX_LLM_BINARY` | llama-server binary | `llama-server` |
+| `GMAX_LLM_PORT` | Server port | `8079` |
+| `GMAX_LLM_IDLE_TIMEOUT` | Minutes before auto-stop | `30` |
+
 ## Architecture
 
 All data lives in `~/.gmax/`:
