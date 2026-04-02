@@ -1,11 +1,15 @@
 import * as path from "node:path";
 import { Command } from "commander";
+import { readGlobalConfig, writeGlobalConfig } from "../lib/index/index-config";
 import { gracefulExit } from "../lib/utils/exit";
 
 async function showStatus() {
+  const config = readGlobalConfig();
+  const enabled = config.llmEnabled === true;
+
   const { isDaemonRunning, sendDaemonCommand } = await import("../lib/utils/daemon-client");
   if (!(await isDaemonRunning())) {
-    console.log("LLM server: not running (daemon not started)");
+    console.log(`LLM: ${enabled ? "enabled" : "disabled"} · server not running (daemon not started)`);
     return;
   }
   const resp = await sendDaemonCommand({ cmd: "llm-status" });
@@ -19,11 +23,11 @@ async function showStatus() {
     const uptime = Number(resp.uptime) || 0;
     const mins = Math.floor(uptime / 60);
     const secs = uptime % 60;
-    console.log(`LLM server: running (PID: ${resp.pid}, port: ${resp.port})`);
+    console.log(`LLM: enabled · running (PID: ${resp.pid}, port: ${resp.port})`);
     console.log(`  Model: ${model}`);
     console.log(`  Uptime: ${mins}m ${secs}s`);
   } else {
-    console.log("LLM server: not running");
+    console.log(`LLM: ${enabled ? "enabled" : "disabled"} · server not running`);
   }
 }
 
@@ -93,6 +97,43 @@ llm
   .action(async () => {
     try {
       await showStatus();
+    } finally {
+      await gracefulExit();
+    }
+  });
+
+llm
+  .command("on")
+  .description("Enable LLM features (allows server to start)")
+  .action(async () => {
+    try {
+      const config = readGlobalConfig();
+      config.llmEnabled = true;
+      writeGlobalConfig(config);
+      console.log("LLM enabled. Use `gmax llm start` to start the server.");
+    } finally {
+      await gracefulExit();
+    }
+  });
+
+llm
+  .command("off")
+  .description("Disable LLM features and stop the server if running")
+  .action(async () => {
+    try {
+      // Stop server if running
+      const { isDaemonRunning, sendDaemonCommand } = await import("../lib/utils/daemon-client");
+      if (await isDaemonRunning()) {
+        const status = await sendDaemonCommand({ cmd: "llm-status" });
+        if (status.ok && status.running) {
+          await sendDaemonCommand({ cmd: "llm-stop" });
+          console.log("LLM server stopped.");
+        }
+      }
+      const config = readGlobalConfig();
+      config.llmEnabled = false;
+      writeGlobalConfig(config);
+      console.log("LLM disabled. Server will not auto-start.");
     } finally {
       await gracefulExit();
     }

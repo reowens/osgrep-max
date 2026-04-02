@@ -33,6 +33,7 @@ export interface GlobalConfig {
   embedMode: "cpu" | "gpu";
   mlxModel?: string;
   queryLog?: boolean;
+  llmEnabled?: boolean;
 }
 
 const GLOBAL_CONFIG_PATH = path.join(PATHS.globalRoot, "config.json");

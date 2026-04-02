@@ -2,6 +2,7 @@ import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as http from "node:http";
 import { PATHS } from "../../config";
+import { readGlobalConfig } from "../index/index-config";
 import { openRotatedLog } from "../utils/log-rotate";
 import { type LlmConfig, getLlmConfig } from "./config";
 
@@ -43,8 +44,17 @@ export class LlmServer {
     });
   }
 
+  /** Check if LLM is enabled in global config. */
+  isEnabled(): boolean {
+    return readGlobalConfig().llmEnabled === true;
+  }
+
   /** Start llama-server, poll until ready, start idle watchdog. */
   async start(): Promise<void> {
+    if (!this.isEnabled()) {
+      throw new Error("LLM is disabled. Run `gmax llm on` to enable.");
+    }
+
     if (await this.healthy()) {
       // Adopt an existing server (e.g. after daemon crash + restart)
       this.lastRequestTime = Date.now();
@@ -163,8 +173,11 @@ export class LlmServer {
     console.log(`[llm] Server force-killed (PID: ${pid})`);
   }
 
-  /** Start if not running. */
+  /** Start if not running. Respects llmEnabled config. */
   async ensure(): Promise<void> {
+    if (!this.isEnabled()) {
+      throw new Error("LLM is disabled. Run `gmax llm on` to enable.");
+    }
     if (await this.healthy()) {
       this.touchIdle();
       return;
