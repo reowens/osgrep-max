@@ -229,4 +229,4 @@ gmax llm on/off/start/stop/status          # manage local LLM server
 
 1. Check if the project is added: `Bash(gmax status)`
 2. If not added: `Bash(gmax add)`
-3. If stale: `Bash(gmax index)` to force re-index
+3. If stale: `Bash(gmax index)` to re-index (auto-detects and repairs cache/vector mismatches)

@@ -239,11 +239,19 @@ export async function initialSync(
       const projectKeys = await mc.getKeysWithPrefix(rootPrefix);
       log("index", `Cached files: ${projectKeys.size}`);
 
-      // Coherence check: if LMDB has entries but LanceDB has no vectors for
-      // this project, the vector store was wiped (e.g. compaction failure,
-      // manual cleanup). Clear the stale cache so files get re-embedded.
-      if (projectKeys.size > 0 && !(await vectorDb.hasRowsForPath(rootPrefix))) {
+      // Coherence check: if LMDB has substantially more entries than LanceDB
+      // has distinct files, the vector store is out of sync (e.g. batch
+      // timeouts wrote MetaCache but not vectors, compaction failure, etc.).
+      // Clear the stale cache entries so those files get re-embedded.
+      const vectorFileCount = await vectorDb.countDistinctFilesForPath(rootPrefix);
+      if (projectKeys.size > 0 && vectorFileCount === 0) {
         log("index", `Stale cache detected: ${projectKeys.size} cached files but no vectors — clearing cache`);
+        for (const key of projectKeys) {
+          mc.delete(key);
+        }
+        projectKeys.clear();
+      } else if (projectKeys.size > 0 && vectorFileCount < projectKeys.size * 0.8) {
+        log("index", `Partial cache detected: ${vectorFileCount} files in vectors vs ${projectKeys.size} in cache — clearing cache to re-embed missing files`);
         for (const key of projectKeys) {
           mc.delete(key);
         }
