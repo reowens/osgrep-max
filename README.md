@@ -118,8 +118,7 @@ Plugins auto-update when you run `npm install -g grepmax@latest` — no need to 
 
 | Tool | Description |
 | --- | --- |
-| `semantic_search` | Search by meaning. 16+ params: query, limit, role, language, scope (project/all), etc. |
-| `search_all` | Cross-project search. Same params + project filtering. |
+| `semantic_search` | Search by meaning. 16+ params: query, limit, role, language, scope (project/all), project filtering, etc. |
 | `code_skeleton` | File structure with bodies collapsed (~4x fewer tokens). |
 | `trace_calls` | Call graph: importers, callers (multi-hop), callees with file:line. |
 | `extract_symbol` | Complete function/class body by symbol name. |
@@ -287,6 +286,7 @@ fixtures/
 gmax doctor                   # Check health
 gmax doctor --fix             # Auto-repair (compact, prune, fix locks)
 gmax doctor --agent           # Machine-readable health output
+gmax index                    # Reindex (auto-detects and repairs cache/vector mismatches)
 gmax index --reset            # Full reindex from scratch
 gmax watch stop && gmax watch --daemon -b  # Restart daemon
 ```

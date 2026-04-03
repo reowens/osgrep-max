@@ -268,6 +268,10 @@ export class Daemon {
     const { INDEXABLE_EXTENSIONS } = await import("../../config");
     const { isFileCached } = await import("../utils/cache-check");
 
+    const rootPrefix = root.endsWith("/") ? root : `${root}/`;
+    const cachedPaths = await this.metaCache!.getKeysWithPrefix(rootPrefix);
+    const seenPaths = new Set<string>();
+
     let queued = 0;
     for await (const relPath of walk(root, {
       additionalPatterns: ["**/.git/**", "**/.gmax/**", "**/.osgrep/**"],
@@ -276,6 +280,8 @@ export class Daemon {
       const ext = path.extname(absPath).toLowerCase();
       const bn = path.basename(absPath).toLowerCase();
       if (!INDEXABLE_EXTENSIONS.has(ext) && !INDEXABLE_EXTENSIONS.has(bn)) continue;
+
+      seenPaths.add(absPath);
 
       try {
         const stats = await fs.promises.stat(absPath);
@@ -287,8 +293,20 @@ export class Daemon {
       } catch {}
     }
 
-    if (queued > 0) {
-      console.log(`[daemon:${path.basename(root)}] Catchup: ${queued} file(s) changed while offline`);
+    // Purge files deleted while daemon was offline
+    let purged = 0;
+    for (const cachedPath of cachedPaths) {
+      if (!seenPaths.has(cachedPath)) {
+        processor.handleFileEvent("unlink", cachedPath);
+        purged++;
+      }
+    }
+
+    if (queued > 0 || purged > 0) {
+      const parts: string[] = [];
+      if (queued > 0) parts.push(`${queued} changed`);
+      if (purged > 0) parts.push(`${purged} deleted`);
+      console.log(`[daemon:${path.basename(root)}] Catchup: ${parts.join(", ")} file(s) while offline`);
     }
   }
 

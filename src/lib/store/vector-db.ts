@@ -458,6 +458,21 @@ export class VectorDB {
     return rows.length > 0;
   }
 
+  async countDistinctFilesForPath(pathPrefix: string): Promise<number> {
+    const table = await this.ensureTable();
+    const prefix = pathPrefix.endsWith("/") ? pathPrefix : `${pathPrefix}/`;
+    const rows = await table
+      .query()
+      .select(["path"])
+      .where(`path LIKE '${escapeSqlString(prefix)}%'`)
+      .toArray();
+    const unique = new Set<string>();
+    for (const r of rows) {
+      unique.add(String(r.path));
+    }
+    return unique.size;
+  }
+
   async getStats(): Promise<{ chunks: number; totalBytes: number }> {
     const table = await this.ensureTable();
     const [count, stats] = await Promise.all([
