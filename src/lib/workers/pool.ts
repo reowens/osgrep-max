@@ -341,15 +341,19 @@ export class WorkerPool {
     if (this.destroyed || !this.tasks.has(task.id)) return;
 
     this.clearTaskTimeout(task);
+    const filePath =
+      (task.payload as Record<string, unknown>)?.path ??
+      (task.payload as Record<string, unknown>)?.absolutePath ??
+      "unknown";
     if (task.method !== "processFile") {
       console.warn(
-        `[worker-pool] ${task.method} timed out after ${TASK_TIMEOUT_MS}ms; restarting worker.`,
+        `[worker-pool] ${task.method} timed out after ${TASK_TIMEOUT_MS}ms on ${filePath}; restarting worker.`,
       );
     }
     this.completeTask(task, null);
     task.reject(
       new Error(
-        `Worker task ${task.method} timed out after ${TASK_TIMEOUT_MS}ms`,
+        `Worker task ${task.method} timed out after ${TASK_TIMEOUT_MS}ms on ${filePath}`,
       ),
     );
 

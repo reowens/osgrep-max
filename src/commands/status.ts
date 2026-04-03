@@ -86,7 +86,9 @@ Examples:
         chunkCounts.set(project.root, rows.length);
       }
       await db.close();
-    } catch {}
+    } catch (err) {
+      console.warn(`[status] Failed to query LanceDB for live chunk counts, using cached counts`);
+    }
 
     if (projects.length === 0) {
       if (opts.agent) {

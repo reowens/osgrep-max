@@ -29,7 +29,12 @@ warnings.filterwarnings("ignore", message=".*PyTorch.*")
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
-
+logging.basicConfig(
+    format="%(asctime)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+    level=logging.INFO,
+)
+logger = logging.getLogger("mlx-embed")
 
 
 import mlx.core as mx
@@ -89,18 +94,18 @@ def embed_texts(texts: list[str]) -> mx.array:
 
 def load_model():
     global model, tokenizer
-    print(f"[mlx-embed] Loading {MODEL_ID}...")
+    logger.info(f"[mlx-embed] Loading {MODEL_ID}...")
     model, _ = load(MODEL_ID)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     _ = embed_texts(["warm up"])
-    print("[mlx-embed] Model ready on Metal GPU.")
+    logger.info("[mlx-embed] Model ready on Metal GPU.")
 
 
 async def idle_watchdog():
     while True:
         await asyncio.sleep(60)
         if time.time() - last_activity > IDLE_TIMEOUT_S:
-            print("[mlx-embed] Idle timeout, shutting down")
+            logger.info("[mlx-embed] Idle timeout, shutting down")
             os._exit(0)
 
 
@@ -158,14 +163,14 @@ def main():
 
     # Bail early if port is already taken
     if is_port_in_use(PORT):
-        print(f"[mlx-embed] Port {PORT} already in use — server is already running.")
+        logger.info(f"[mlx-embed] Port {PORT} already in use — server is already running.")
         return
 
-    print(f"[mlx-embed] Starting on port {PORT}")
+    logger.info(f"[mlx-embed] Starting on port {PORT}")
 
     # Clean shutdown — exit immediately, skip uvicorn's noisy teardown
     def handle_signal(sig, frame):
-        print("[mlx-embed] Stopped.")
+        logger.info("[mlx-embed] Stopped.")
         # Kill the resource_tracker child process before exit to prevent
         # its spurious "leaked semaphore" warning (Python 3.13 bug)
         try:

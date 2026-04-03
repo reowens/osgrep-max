@@ -68,9 +68,37 @@ function startPythonServer(serverDir, scriptName, logName, processName) {
       VIRTUAL_ENV: "",
       CONDA_DEFAULT_ENV: "",
       GMAX_PROCESS_NAME: processName || logName,
+      HF_TOKEN_PATH: process.env.HF_TOKEN_PATH || _path.join(require("node:os").homedir(), ".cache", "huggingface", "token"),
     },
   });
   child.unref();
+}
+
+// --- Crash counter (Item 14) ---
+const CRASH_FILE = _path.join(require("node:os").homedir(), ".gmax", "mlx-embed-crashes.json");
+const MAX_CRASHES = 3;
+const CRASH_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+function readCrashCount() {
+  try {
+    const data = JSON.parse(fs.readFileSync(CRASH_FILE, "utf-8"));
+    if (data.lastCrash && Date.now() - new Date(data.lastCrash).getTime() > CRASH_WINDOW_MS) {
+      return { count: 0, lastCrash: null }; // Window expired, reset
+    }
+    return { count: data.count || 0, lastCrash: data.lastCrash };
+  } catch {
+    return { count: 0, lastCrash: null };
+  }
+}
+
+function writeCrashCount(count, lastCrash) {
+  try {
+    fs.writeFileSync(CRASH_FILE, JSON.stringify({ count, lastCrash }));
+  } catch {}
+}
+
+function resetCrashCount() {
+  try { fs.unlinkSync(CRASH_FILE); } catch {}
 }
 
 function isProjectRegistered() {
@@ -109,8 +137,30 @@ async function main() {
     const serverDir = findMlxServerDir();
 
     // Start MLX embed server (port 8100)
-    if (serverDir && !(await isServerRunning(8100))) {
-      startPythonServer(serverDir, "server.py", "mlx-embed-server", "gmax-embed");
+    const embedRunning = await isServerRunning(8100);
+    if (serverDir && !embedRunning) {
+      const crashes = readCrashCount();
+      if (crashes.count < MAX_CRASHES) {
+        startPythonServer(serverDir, "server.py", "mlx-embed-server", "gmax-embed");
+
+        // Fire-and-forget health verification (Item 13)
+        (async () => {
+          const maxAttempts = 5;
+          const delayMs = 2000;
+          for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(r => setTimeout(r, delayMs));
+            if (await isServerRunning(8100)) {
+              resetCrashCount();
+              return;
+            }
+          }
+          // Server didn't start after 10s — record crash
+          const c = readCrashCount();
+          writeCrashCount(c.count + 1, new Date().toISOString());
+        })();
+      }
+    } else if (embedRunning) {
+      resetCrashCount();
     }
 
     // Start LLM summarizer server (port 8101) — opt-in only

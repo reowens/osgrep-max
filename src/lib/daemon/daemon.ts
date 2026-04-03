@@ -80,8 +80,10 @@ export class Daemon {
     try {
       fs.mkdirSync(PATHS.cacheDir, { recursive: true });
       fs.mkdirSync(PATHS.lancedbDir, { recursive: true });
+      console.log("[daemon] Opening LanceDB:", PATHS.lancedbDir);
       this.vectorDb = new VectorDB(PATHS.lancedbDir);
       this.vectorDb.startMaintenanceLoop();
+      console.log("[daemon] Opening MetaCache:", PATHS.lmdbPath);
       this.metaCache = new MetaCache(PATHS.lmdbPath);
     } catch (err) {
       console.error("[daemon] Failed to open shared resources:", err);
@@ -137,6 +139,10 @@ export class Daemon {
       let buf = "";
       conn.on("data", (chunk) => {
         buf += chunk.toString();
+        if (buf.length > 1_000_000) {
+          conn.destroy();
+          return;
+        }
         const nl = buf.indexOf("\n");
         if (nl === -1) return;
         const line = buf.slice(0, nl);
@@ -189,16 +195,23 @@ export class Daemon {
       projectRoot: root,
       vectorDb: this.vectorDb,
       metaCache: this.metaCache,
-      onReindex: (files, ms) => {
+      onReindex: async (files, ms) => {
         console.log(
           `[daemon:${path.basename(root)}] Reindexed ${files} file${files !== 1 ? "s" : ""} (${(ms / 1000).toFixed(1)}s)`,
         );
         // Update project registry so gmax status shows fresh data
         const proj = getProject(root);
         if (proj) {
+          let chunkCount = proj.chunkCount;
+          try {
+            chunkCount = await this.vectorDb!.countRowsForPath(root);
+          } catch (err) {
+            console.warn(`[daemon:${path.basename(root)}] Failed to query chunk count: ${err}`);
+          }
           registerProject({
             ...proj,
             lastIndexed: new Date().toISOString(),
+            chunkCount,
           });
         }
         // Back to watching after batch completes
@@ -274,7 +287,7 @@ export class Daemon {
 
     let queued = 0;
     for await (const relPath of walk(root, {
-      additionalPatterns: ["**/.git/**", "**/.gmax/**", "**/.osgrep/**"],
+      additionalPatterns: ["**/.git/**", "**/.gmax/**"],
     })) {
       const absPath = path.join(root, relPath);
       const ext = path.extname(absPath).toLowerCase();

@@ -458,6 +458,12 @@ export class VectorDB {
     return rows.length > 0;
   }
 
+  async countRowsForPath(pathPrefix: string): Promise<number> {
+    const table = await this.ensureTable();
+    const prefix = pathPrefix.endsWith("/") ? pathPrefix : `${pathPrefix}/`;
+    return table.countRows(`path LIKE '${escapeSqlString(prefix)}%'`);
+  }
+
   async countDistinctFilesForPath(pathPrefix: string): Promise<number> {
     const table = await this.ensureTable();
     const prefix = pathPrefix.endsWith("/") ? pathPrefix : `${pathPrefix}/`;

@@ -14,6 +14,8 @@ const EMBED_MODE = process.env.GMAX_EMBED_MODE || "auto";
 let mlxAvailable: boolean | null = null;
 let lastCheck = 0;
 const CHECK_INTERVAL_MS = 30_000;
+let lastMlxWarning = 0;
+const MLX_WARNING_INTERVAL_MS = 60_000;
 
 function postJSON(
   path: string,
@@ -76,7 +78,7 @@ async function checkHealth(): Promise<boolean> {
   });
 }
 
-async function isMlxUp(): Promise<boolean> {
+export async function isMlxUp(): Promise<boolean> {
   const now = Date.now();
   if (mlxAvailable !== null && now - lastCheck < CHECK_INTERVAL_MS) {
     return mlxAvailable;
@@ -86,8 +88,14 @@ async function isMlxUp(): Promise<boolean> {
 
   // On first check (cold start), retry once after 3s — server may still be loading
   if (!result && mlxAvailable === null) {
+    console.log("[mlx] Embed server not ready, retrying in 3s...");
     await new Promise((r) => setTimeout(r, 3000));
     result = await checkHealth();
+    if (result) {
+      console.log("[mlx] Embed server ready");
+    } else {
+      console.warn("[mlx] Embed server not available after retry");
+    }
   }
 
   mlxAvailable = result;
@@ -105,9 +113,27 @@ export async function mlxEmbed(
   if (EMBED_MODE === "cpu") return null;
   if (!(await isMlxUp())) return null;
 
-  const { ok, data } = await postJSON("/embed", { texts });
-  if (!ok || !data?.vectors) {
+  let postResult: { ok: boolean; data?: any };
+  try {
+    postResult = await postJSON("/embed", { texts });
+  } catch (error: any) {
     mlxAvailable = false;
+    const now = Date.now();
+    if (now - lastMlxWarning >= MLX_WARNING_INTERVAL_MS) {
+      console.error("[mlx] Embed server failed:", error.message || error);
+      lastMlxWarning = now;
+    }
+    return null;
+  }
+  const { ok, data } = postResult;
+  if (!ok || !data?.vectors) {
+    const wasPreviouslyAvailable = mlxAvailable !== false;
+    mlxAvailable = false;
+    const now = Date.now();
+    if (wasPreviouslyAvailable || now - lastMlxWarning >= MLX_WARNING_INTERVAL_MS) {
+      console.error("[mlx] Embed server failed: bad response (ok=" + ok + ", hasVectors=" + !!data?.vectors + ")");
+      lastMlxWarning = now;
+    }
     return null;
   }
 

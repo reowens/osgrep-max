@@ -33,7 +33,9 @@ function loadRegistry(): ProjectEntry[] {
 
 function saveRegistry(entries: ProjectEntry[]): void {
   fs.mkdirSync(path.dirname(REGISTRY_PATH), { recursive: true });
-  fs.writeFileSync(REGISTRY_PATH, `${JSON.stringify(entries, null, 2)}\n`);
+  const tmp = REGISTRY_PATH + ".tmp";
+  fs.writeFileSync(tmp, `${JSON.stringify(entries, null, 2)}\n`);
+  fs.renameSync(tmp, REGISTRY_PATH);
 }
 
 export function registerProject(entry: ProjectEntry): void {

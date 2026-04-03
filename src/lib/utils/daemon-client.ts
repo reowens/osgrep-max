@@ -161,7 +161,7 @@ export function sendStreamingCommand(
             onProgress(msg as StreamingProgress);
           }
         } catch {
-          // ignore partial/malformed lines
+          console.warn("[daemon-client] Malformed response line:", line.slice(0, 200));
         }
       }
     });

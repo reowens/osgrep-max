@@ -30,7 +30,6 @@ export const DEFAULT_IGNORE_PATTERNS = [
   ".gradle",
   ".m2",
   "vendor",
-  ".osgrep",
   ".gmax",
   ".gmax.json",
   // Minified/generated assets
