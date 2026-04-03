@@ -278,7 +278,7 @@ export class Daemon {
 
   private async catchupScan(root: string, processor: ProjectBatchProcessor): Promise<void> {
     const { walk } = await import("../index/walker");
-    const { INDEXABLE_EXTENSIONS } = await import("../../config");
+    const { INDEXABLE_EXTENSIONS, MAX_FILE_SIZE_BYTES } = await import("../../config");
     const { isFileCached } = await import("../utils/cache-check");
 
     const rootPrefix = root.endsWith("/") ? root : `${root}/`;
@@ -298,6 +298,8 @@ export class Daemon {
 
       try {
         const stats = await fs.promises.stat(absPath);
+        // Skip files that are too large or empty — they'll never be indexed
+        if (stats.size === 0 || stats.size > MAX_FILE_SIZE_BYTES) continue;
         const cached = this.metaCache!.get(absPath);
         if (!isFileCached(cached, stats)) {
           processor.handleFileEvent("change", absPath);

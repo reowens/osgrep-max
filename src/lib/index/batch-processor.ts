@@ -199,15 +199,6 @@ export class ProjectBatchProcessor {
         }
       }
 
-      // Requeue files that were attempted but not successfully processed
-      // (e.g. pool became unhealthy mid-batch before vectors were flushed)
-      for (const [absPath, event] of batch) {
-        if (attempted.has(absPath) && !metaUpdates.has(absPath) && !metaDeletes.includes(absPath)) {
-          if (!this.pending.has(absPath)) {
-            this.pending.set(absPath, event);
-          }
-        }
-      }
 
       // Flush to VectorDB: insert first, then delete old (preserving new)
       const newIds = vectors.map((v) => v.id);
