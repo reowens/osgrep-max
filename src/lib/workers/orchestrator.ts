@@ -23,6 +23,8 @@ import { ColbertModel, type HybridResult } from "./embeddings/colbert";
 import { GraniteModel } from "./embeddings/granite";
 import { mlxEmbed } from "./embeddings/mlx-client";
 
+let mlxFallbackWarned = false;
+
 export type ProcessFileInput = {
   path: string;
   absolutePath?: string;
@@ -116,9 +118,12 @@ export class WorkerOrchestrator {
       if (i > 0) onProgress?.();
       const batchTexts = texts.slice(i, i + BATCH_SIZE);
       // Try MLX GPU server first, fall back to ONNX CPU
-      const denseBatch =
-        (await mlxEmbed(batchTexts)) ??
-        (await this.granite.runBatch(batchTexts));
+      const mlxResult = await mlxEmbed(batchTexts);
+      if (!mlxResult && !mlxFallbackWarned) {
+        console.warn("[embed] MLX unavailable, falling back to CPU (ONNX)");
+        mlxFallbackWarned = true;
+      }
+      const denseBatch = mlxResult ?? (await this.granite.runBatch(batchTexts));
       const colbertBatch = await this.colbert.runBatch(
         batchTexts,
         denseBatch,

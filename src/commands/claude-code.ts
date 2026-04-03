@@ -10,8 +10,17 @@ function runClaudeCommand(args: string[]): Promise<void> {
       stdio: "inherit",
     });
 
-    child.on("error", (error) => reject(error));
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error("claude command timed out after 60s"));
+    }, 60_000);
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
     child.on("exit", (code) => {
+      clearTimeout(timeout);
       if (code === 0) {
         resolve();
       } else {

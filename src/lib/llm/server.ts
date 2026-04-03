@@ -1,6 +1,7 @@
 import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as http from "node:http";
+import * as path from "node:path";
 import { PATHS } from "../../config";
 import { readGlobalConfig } from "../index/index-config";
 import { openRotatedLog } from "../utils/log-rotate";
@@ -32,8 +33,28 @@ export class LlmServer {
           timeout: HEALTH_TIMEOUT_MS,
         },
         (res) => {
-          res.resume();
-          resolve(res.statusCode === 200);
+          if (res.statusCode !== 200) {
+            res.resume();
+            resolve(false);
+            return;
+          }
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("end", () => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString());
+              const runningModel: string | undefined = body?.data?.[0]?.id;
+              if (runningModel) {
+                const configBasename = path.basename(this.config.model);
+                if (runningModel !== configBasename && !configBasename.includes(runningModel) && !runningModel.includes(configBasename)) {
+                  console.log(`[llm] Model mismatch: running "${runningModel}" but config expects "${configBasename}"`);
+                }
+              }
+            } catch {
+              // ignore parse errors — server is still healthy
+            }
+            resolve(true);
+          });
         },
       );
       req.on("error", () => resolve(false));

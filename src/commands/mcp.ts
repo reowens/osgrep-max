@@ -23,7 +23,7 @@ import { isIndexableFile } from "../lib/utils/file-utils";
 import { escapeSqlString, normalizePath } from "../lib/utils/filter-builder";
 import { formatTimeAgo } from "../lib/utils/format-helpers";
 import { extractImports } from "../lib/utils/import-extractor";
-import { listProjects } from "../lib/utils/project-registry";
+import { getProject, listProjects } from "../lib/utils/project-registry";
 import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 import { launchWatcher } from "../lib/utils/watcher-launcher";
 import { getWatcherCoveringPath } from "../lib/utils/watcher-store";
@@ -447,7 +447,16 @@ export const mcp = new Command("mcp")
       child.unref();
       _indexProgress = `PID ${_indexChildPid}`;
 
+      const indexTimeout = setTimeout(() => {
+        try { child.kill("SIGKILL"); } catch {}
+        _indexing = false;
+        _indexProgress = "";
+        _indexChildPid = null;
+        console.error("[MCP] Background indexing timed out after 30 minutes");
+      }, 30 * 60 * 1000);
+
       child.on("exit", (code) => {
+        clearTimeout(indexTimeout);
         _indexing = false;
         _indexProgress = "";
         _indexChildPid = null;
@@ -492,6 +501,14 @@ export const mcp = new Command("mcp")
       if (_indexing) {
         return ok(
           `Indexing in progress (${_indexProgress}). Results may be incomplete or empty — try again shortly.`,
+        );
+      }
+
+      // Check if project is pending or has no chunks
+      const proj = getProject(projectRoot);
+      if (proj?.status === "pending" || (proj && proj.chunkCount === 0)) {
+        return err(
+          "Project not indexed yet. Run `gmax add` to index it first.",
         );
       }
 
@@ -2129,9 +2146,6 @@ export const mcp = new Command("mcp")
       switch (name) {
         case "semantic_search":
           result = await handleSemanticSearch(toolArgs, false);
-          break;
-        case "search_all":
-          result = await handleSemanticSearch(toolArgs, true);
           break;
         case "code_skeleton":
           result = await handleCodeSkeleton(toolArgs);

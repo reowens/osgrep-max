@@ -244,6 +244,10 @@ export async function initialSync(
       // timeouts wrote MetaCache but not vectors, compaction failure, etc.).
       // Clear the stale cache entries so those files get re-embedded.
       const vectorFileCount = await vectorDb.countDistinctFilesForPath(rootPrefix);
+      if (projectKeys.size > 0) {
+        const pct = Math.round((vectorFileCount / projectKeys.size) * 100);
+        log("index", `Coherence: ${vectorFileCount} vectors / ${projectKeys.size} cached (${pct}%)`);
+      }
       if (projectKeys.size > 0 && vectorFileCount === 0) {
         log("index", `Stale cache detected: ${projectKeys.size} cached files but no vectors — clearing cache`);
         for (const key of projectKeys) {
@@ -279,6 +283,17 @@ export async function initialSync(
     onProgress?.({ processed: 0, indexed: 0, total, filePath: "Scanning..." });
 
     const pool = getWorkerPool();
+
+    // Pre-flight: verify embedding pipeline is functional
+    const embedMode = process.env.GMAX_EMBED_MODE || "auto";
+    if (embedMode !== "cpu") {
+      const { isMlxUp } = await import("../workers/embeddings/mlx-client");
+      const mlxReady = await isMlxUp();
+      if (!mlxReady) {
+        log("index", "WARNING: MLX embed server not running — using CPU embeddings (slower)");
+      }
+    }
+
     // Get only this project's cached paths (scoped by prefix)
     const cachedPaths =
       dryRun || treatAsEmptyCache
@@ -386,7 +401,7 @@ export async function initialSync(
     };
 
     for await (const relPath of walk(paths.root, {
-      additionalPatterns: ["**/.git/**", "**/.gmax/**", "**/.osgrep/**"],
+      additionalPatterns: ["**/.git/**", "**/.gmax/**"],
     })) {
       if (signal?.aborted) {
         shouldSkipCleanup = true;

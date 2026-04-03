@@ -56,8 +56,8 @@ program
     process.env.GMAX_STORE || undefined,
   );
 
-// Detect legacy per-project .gmax/ or .osgrep/ directories
-const legacyProjectData = [".gmax", ".osgrep"]
+// Detect legacy per-project .gmax/ directory
+const legacyProjectData = [".gmax"]
   .map((d) => path.join(process.cwd(), d))
   .find((d) => fs.existsSync(path.join(d, "lancedb")));
 if (legacyProjectData) {

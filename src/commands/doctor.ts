@@ -58,6 +58,9 @@ export const doctor = new Command("doctor")
 
     const globalConfig = readGlobalConfig();
     const tier = MODEL_TIERS[globalConfig.modelTier] ?? MODEL_TIERS.small;
+    if (!MODEL_TIERS[globalConfig.modelTier]) {
+      console.log(`WARN  Unknown model tier '${globalConfig.modelTier}', falling back to 'small'`);
+    }
     const embedModel =
       globalConfig.embedMode === "gpu" ? tier.mlxModel : tier.onnxModel;
 
@@ -89,12 +92,39 @@ export const doctor = new Command("doctor")
       }
 
       // Check MLX embed server
-      const embedUp = await fetch("http://127.0.0.1:8100/health")
-        .then((r) => r.ok)
-        .catch(() => false);
+      let embedUp = false;
+      let embedError = "";
+      try {
+        const res = await fetch("http://127.0.0.1:8100/health");
+        embedUp = res.ok;
+      } catch (err: any) {
+        embedError = err.code === "ECONNREFUSED" ? "connection refused" : (err.message || String(err));
+      }
       console.log(
-        `${embedUp ? "ok" : "WARN"}  MLX Embed: ${embedUp ? "running (port 8100)" : "not running"}`,
+        `${embedUp ? "ok" : "WARN"}  MLX Embed: ${embedUp ? "running (port 8100)" : `not running${embedError ? ` (${embedError})` : ""}`}`,
       );
+
+      if (embedUp) {
+        try {
+          const start = Date.now();
+          const embedRes = await fetch("http://127.0.0.1:8100/embed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ texts: ["gmax health check"] }),
+          });
+          const embedData = await embedRes.json();
+          const dim = embedData?.vectors?.[0]?.length ?? 0;
+          const ms = Date.now() - start;
+          const expectedDim = tier.vectorDim || 384;
+          if (dim === expectedDim) {
+            console.log(`ok  Embedding: working (${dim}d, ${ms}ms)`);
+          } else {
+            console.log(`FAIL  Embedding: wrong dimensions (got ${dim}, expected ${expectedDim})`);
+          }
+        } catch (err: any) {
+          console.log(`FAIL  Embedding: test failed (${err.message || err})`);
+        }
+      }
 
       // Check summarizer server
       const summarizerUp = await fetch("http://127.0.0.1:8101/health")
@@ -247,6 +277,28 @@ export const doctor = new Command("doctor")
           console.log(
             `ok  Projects: ${projects.length} registered, all directories exist`,
           );
+        }
+
+        // Cache Coherence
+        if (projects.length > 0) {
+          console.log("\nCache Coherence\n");
+          try {
+            const { MetaCache } = await import("../lib/store/meta-cache");
+            const mc = new MetaCache(PATHS.lmdbPath);
+
+            for (const project of projects.filter(p => p.status === "indexed")) {
+              const prefix = project.root.endsWith("/") ? project.root : `${project.root}/`;
+              const cachedCount = (await mc.getKeysWithPrefix(prefix)).size;
+              const vectorCount = await db.countDistinctFilesForPath(prefix);
+              if (cachedCount > 0) {
+                const pct = Math.round((vectorCount / cachedCount) * 100);
+                const status = pct >= 80 ? "ok" : "WARN";
+                console.log(`${status}  ${project.name || path.basename(project.root)}: ${vectorCount} indexed / ${cachedCount} cached (${pct}%)`);
+              }
+            }
+
+            await mc.close();
+          } catch {}
         }
       }
 
