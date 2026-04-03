@@ -20,6 +20,7 @@ export interface BatchProcessorOptions {
 
 const DEBOUNCE_MS = 2000;
 const MAX_RETRIES = 5;
+const MAX_BATCH_SIZE = 50;
 
 export class ProjectBatchProcessor {
   readonly projectRoot: string;
@@ -92,13 +93,22 @@ export class ProjectBatchProcessor {
       batchAc.abort();
     }, this.batchTimeoutMs);
 
-    const batch = new Map(this.pending);
-    this.pending.clear();
+    const batch = new Map<string, "change" | "unlink">();
+    let taken = 0;
+    for (const [absPath, event] of this.pending) {
+      batch.set(absPath, event);
+      taken++;
+      if (taken >= MAX_BATCH_SIZE) break;
+    }
+    for (const key of batch.keys()) {
+      this.pending.delete(key);
+    }
     const filenames = [...batch.keys()].map((p) => path.basename(p));
     log(this.wtag, `Processing ${batch.size} changed files: ${filenames.join(", ")}`);
 
     const start = Date.now();
     let reindexed = 0;
+    let processed = 0;
 
     try {
       // No lock needed — daemon is the single writer to LanceDB/MetaCache
@@ -112,6 +122,10 @@ export class ProjectBatchProcessor {
       for (const [absPath, event] of batch) {
         if (batchAc.signal.aborted) break;
         attempted.add(absPath);
+        processed++;
+        if (batch.size > 10 && (processed % 10 === 0 || processed === batch.size)) {
+          log(this.wtag, `Progress: ${processed}/${batch.size} (${reindexed} reindexed)`);
+        }
 
         if (event === "unlink") {
           deletes.push(absPath);
@@ -210,9 +224,10 @@ export class ProjectBatchProcessor {
       if (reindexed > 0) {
         this.onReindex?.(reindexed, duration);
       }
+      const remaining = this.pending.size;
       log(
         this.wtag,
-        `Batch complete: ${batch.size} files, ${reindexed} reindexed (${(duration / 1000).toFixed(1)}s)`,
+        `Batch complete: ${batch.size} files, ${reindexed} reindexed (${(duration / 1000).toFixed(1)}s)${remaining > 0 ? ` — ${remaining} remaining` : ""}`,
       );
       for (const absPath of batch.keys()) {
         this.retryCount.delete(absPath);
