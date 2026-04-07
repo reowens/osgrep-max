@@ -101,19 +101,74 @@ export class Daemon {
       throw err;
     }
 
-    // 2. Kill existing per-project watchers
+    // 2. Stale socket cleanup + start socket server EARLY.
+    // The socket must be listening before the PID file is written so that
+    // other daemons checking isDaemonRunning() never see a PID for a process
+    // that can't respond to pings. Without this, the slow initialization
+    // steps below (LanceDB, MLX, project watchers) create a window where
+    // new daemons kill this one as "unresponsive".
+    try { fs.unlinkSync(PATHS.daemonSocket); } catch {}
+
+    this.server = net.createServer((conn) => {
+      dbg("daemon", "client connected");
+      let buf = "";
+      conn.on("data", (chunk) => {
+        buf += chunk.toString();
+        if (buf.length > 1_000_000) {
+          conn.destroy();
+          return;
+        }
+        const nl = buf.indexOf("\n");
+        if (nl === -1) return;
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        let cmd: Record<string, unknown>;
+        try {
+          cmd = JSON.parse(line);
+        } catch {
+          conn.write(`${JSON.stringify({ ok: false, error: "invalid JSON" })}\n`);
+          conn.end();
+          return;
+        }
+        handleCommand(this, cmd, conn).then((resp) => {
+          // null means the handler is managing the connection (streaming)
+          if (resp !== null) {
+            conn.write(`${JSON.stringify(resp)}\n`);
+            conn.end();
+          }
+        });
+      });
+      conn.on("error", () => {});
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      this.server!.on("error", (err) => {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "EADDRINUSE") {
+          console.error("[daemon] Socket already in use");
+          reject(err);
+        } else if (code === "EOPNOTSUPP") {
+          console.error("[daemon] Filesystem does not support Unix sockets");
+          process.exitCode = 2;
+          reject(err);
+        } else {
+          reject(err);
+        }
+      });
+      this.server!.listen(PATHS.daemonSocket, () => resolve());
+    });
+
+    // 3. Write PID file AFTER socket is listening — ensures any process that
+    // reads the PID can immediately ping this daemon and get a response.
+    fs.writeFileSync(PATHS.daemonPidFile, String(process.pid));
+
+    // 4. Kill existing per-project watchers
     const existing = listWatchers();
     for (const w of existing) {
       console.log(`[daemon] Taking over from per-project watcher (PID: ${w.pid}, ${path.basename(w.projectRoot)})`);
       await killProcess(w.pid);
       unregisterWatcher(w.pid);
     }
-
-    // 3. Write PID file (informational only — lock is the real guard)
-    fs.writeFileSync(PATHS.daemonPidFile, String(process.pid));
-
-    // 4. Stale socket cleanup
-    try { fs.unlinkSync(PATHS.daemonSocket); } catch {}
 
     // 5. Open shared resources
     try {
@@ -183,56 +238,6 @@ export class Daemon {
         this.shutdown();
       }
     }, HEARTBEAT_INTERVAL_MS);
-
-    // 11. Socket server
-    this.server = net.createServer((conn) => {
-      dbg("daemon", "client connected");
-      let buf = "";
-      conn.on("data", (chunk) => {
-        buf += chunk.toString();
-        if (buf.length > 1_000_000) {
-          conn.destroy();
-          return;
-        }
-        const nl = buf.indexOf("\n");
-        if (nl === -1) return;
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        let cmd: Record<string, unknown>;
-        try {
-          cmd = JSON.parse(line);
-        } catch {
-          conn.write(`${JSON.stringify({ ok: false, error: "invalid JSON" })}\n`);
-          conn.end();
-          return;
-        }
-        handleCommand(this, cmd, conn).then((resp) => {
-          // null means the handler is managing the connection (streaming)
-          if (resp !== null) {
-            conn.write(`${JSON.stringify(resp)}\n`);
-            conn.end();
-          }
-        });
-      });
-      conn.on("error", () => {});
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      this.server!.on("error", (err) => {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === "EADDRINUSE") {
-          console.error("[daemon] Socket already in use");
-          reject(err);
-        } else if (code === "EOPNOTSUPP") {
-          console.error("[daemon] Filesystem does not support Unix sockets");
-          process.exitCode = 2;
-          reject(err);
-        } else {
-          reject(err);
-        }
-      });
-      this.server!.listen(PATHS.daemonSocket, () => resolve());
-    });
 
     console.log(`[daemon] Started (PID: ${process.pid}, ${this.processors.size} projects)`);
   }
