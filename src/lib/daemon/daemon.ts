@@ -86,7 +86,10 @@ export class Daemon {
         stale: 120_000,
         onCompromised: () => {
           console.error("[daemon] Lock compromised — another daemon took over. Shutting down.");
-          this.shutdown();
+          // Force exit after timeout — shutdown() is async and may not fully
+          // clear event loop references, leaving zombie daemon processes.
+          setTimeout(() => process.exit(1), 10_000).unref();
+          this.shutdown().finally(() => process.exit(0));
         },
       });
       dbg("daemon", "lock acquired");
