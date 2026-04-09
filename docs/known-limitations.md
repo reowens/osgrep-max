@@ -1,12 +1,19 @@
 # Known Limitations
 
-Verified 2026-04-08.
+Verified 2026-04-09.
 
-## LLM server crash not handled
+## Coherence check doesn't log findings
 
-If llama-server dies, the PID file still points to a dead process. `ensure()` in `src/lib/llm/server.ts` recovers on next use via `healthy()` HTTP check + `start()`, but there is no proactive monitoring during idle periods. No automatic restart between calls.
+`syncer.ts` coherence check compares MetaCache vs LanceDB file counts but doesn't log the actual numbers or outcome. Hard to debug after the fact. `gmax doctor` does show this (Cache Coherence section), but the syncer path during `gmax index` is silent.
 
-## No dead-letter tracking
+## Doctor swallows index health errors
 
-Files that repeatedly fail processing are dropped after 5 retries (`MAX_RETRIES` in `batch-processor.ts`) with a `console.warn` showing the drop count. No persistent record is kept — the in-memory `retryCount` map is the only tracking, and it's lost on restart.
+`doctor.ts` line ~361 has a bare `catch {}` around the entire index health check block. If LanceDB fails to open, the user sees "Could not check index health" with no reason.
 
+## LLM server model mismatch not detected
+
+`server.ts` `start()` adopts an existing llama-server if healthy, but doesn't verify the running model matches config. If someone restarts llama-server externally with a different model, gmax serves answers from the wrong model silently. The `healthy()` check does log a mismatch warning but doesn't restart.
+
+## Project registry writes not serialized
+
+`project-registry.ts` reads and writes `projects.json` without file-level locking. Concurrent `gmax add` from multiple terminals can corrupt the registry via interleaved read-modify-write.
