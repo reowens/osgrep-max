@@ -52,6 +52,7 @@ export class Daemon {
   private readonly lastOverflowMs = new Map<string, number>();
   private readonly lastCatchupEndMs = new Map<string, number>();
   private readonly projectLocks = new Map<string, Promise<void>>();
+  private readonly shutdownAbortControllers = new Set<AbortController>();
   private llmServer: LlmServer | null = null;
   private mlxChild: ChildProcess | null = null;
 
@@ -623,6 +624,7 @@ export class Daemon {
 
       const ac = new AbortController();
       conn.on("close", () => ac.abort());
+      this.shutdownAbortControllers.add(ac);
 
       this.vectorDb.pauseMaintenanceLoop();
       let lastProgressTime = 0;
@@ -646,7 +648,9 @@ export class Daemon {
           },
         });
 
-        await this.watchProject(root);
+        if (!this.shuttingDown) {
+          await this.watchProject(root);
+        }
 
         writeDone(conn, {
           ok: true,
@@ -660,6 +664,7 @@ export class Daemon {
         console.error(`[daemon] addProject failed for ${path.basename(root)}:`, msg);
         writeDone(conn, { ok: false, error: msg });
       } finally {
+        this.shutdownAbortControllers.delete(ac);
         this.vectorDb?.resumeMaintenanceLoop();
       }
     });
@@ -690,6 +695,7 @@ export class Daemon {
 
       const ac = new AbortController();
       conn.on("close", () => ac.abort());
+      this.shutdownAbortControllers.add(ac);
 
       this.vectorDb.pauseMaintenanceLoop();
       let lastProgressTime = 0;
@@ -727,12 +733,15 @@ export class Daemon {
         console.error(`[daemon] indexProject failed for ${path.basename(root)}:`, msg);
         writeDone(conn, { ok: false, error: msg });
       } finally {
+        this.shutdownAbortControllers.delete(ac);
         this.vectorDb?.resumeMaintenanceLoop();
-        // Re-enable watcher
-        try {
-          await this.watchProject(root);
-        } catch (err) {
-          console.error(`[daemon] Failed to re-watch ${path.basename(root)}:`, err);
+        // Re-enable watcher (skip if shutting down)
+        if (!this.shuttingDown) {
+          try {
+            await this.watchProject(root);
+          } catch (err) {
+            console.error(`[daemon] Failed to re-watch ${path.basename(root)}:`, err);
+          }
         }
       }
     });
@@ -955,6 +964,18 @@ export class Daemon {
 
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     if (this.idleInterval) clearInterval(this.idleInterval);
+
+    // Abort in-flight index/add operations so they exit promptly
+    for (const ac of this.shutdownAbortControllers) {
+      ac.abort();
+    }
+
+    // Wait for in-flight project operations to finish (they check shuttingDown/signal)
+    const pendingLocks = [...this.projectLocks.values()];
+    if (pendingLocks.length > 0) {
+      console.log(`[daemon] Waiting for ${pendingLocks.length} in-flight operation(s)...`);
+      await Promise.allSettled(pendingLocks);
+    }
 
     // Close all processors
     for (const processor of this.processors.values()) {

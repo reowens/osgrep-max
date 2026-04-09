@@ -48,7 +48,7 @@ function withRegistryLock<T>(fn: () => T): T {
   }
   let release: (() => void) | undefined;
   try {
-    release = lockfile.lockSync(REGISTRY_PATH, { stale: 10_000, retries: { retries: 3, minTimeout: 100 } });
+    release = lockfile.lockSync(REGISTRY_PATH, { stale: 10_000 });
     return fn();
   } finally {
     try { release?.(); } catch {}
