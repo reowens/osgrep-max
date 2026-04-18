@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { Command } from "commander";
 import { ensureGrammars } from "../lib/index/grammar-loader";
@@ -20,10 +22,56 @@ import {
 import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 import { launchWatcher } from "../lib/utils/watcher-launcher";
 
+function getBlockedRoots(): Set<string> {
+  const home = os.homedir();
+  return new Set(
+    [
+      home,
+      path.dirname(home),
+      "/",
+      "/tmp",
+      "/private",
+      "/private/tmp",
+      "/private/var",
+      "/var",
+      "/usr",
+      "/opt",
+      "/etc",
+      "/System",
+      "/Library",
+      "/Applications",
+    ].map((p) => path.resolve(p)),
+  );
+}
+
+function logBlockedAttempt(reason: string, attempted: string, extra?: Record<string, unknown>): void {
+  try {
+    const logPath = path.join(os.homedir(), ".gmax", "logs", "blocked-add.log");
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    const entry = {
+      ts: new Date().toISOString(),
+      reason,
+      attempted,
+      cwd: process.cwd(),
+      pid: process.pid,
+      ppid: process.ppid,
+      argv: process.argv,
+      env_claude_session: process.env.CLAUDE_SESSION_ID ?? null,
+      env_claude_project_dir: process.env.CLAUDE_PROJECT_DIR ?? null,
+      ...extra,
+    };
+    fs.appendFileSync(logPath, `${JSON.stringify(entry)}\n`);
+  } catch {}
+}
+
 export const add = new Command("add")
   .description("Add a project to the gmax index")
   .argument("[dir]", "Directory to add (defaults to current directory)")
   .option("--no-index", "Register the project without indexing it")
+  .option(
+    "--force",
+    "Allow adding a parent of existing projects (will REMOVE absorbed children)",
+  )
   .addHelpText(
     "after",
     `
@@ -40,6 +88,19 @@ Examples:
       const targetDir = dir ? path.resolve(dir) : process.cwd();
       const projectRoot = findProjectRoot(targetDir) ?? targetDir;
       const projectName = path.basename(projectRoot);
+
+      const blocked = getBlockedRoots();
+      if (blocked.has(path.resolve(projectRoot))) {
+        logBlockedAttempt("blocked_root", projectRoot);
+        console.error(
+          `Refusing to add ${projectRoot}: this path is blocked from indexing.\n` +
+            `(Blocked: home, /, /Users, /tmp, /private, /var, /usr, /opt, /etc, /System, /Library, /Applications.)\n` +
+            `Pick a specific project subdirectory instead.\n` +
+            `Diagnostic logged to ~/.gmax/logs/blocked-add.log (cwd=${process.cwd()} ppid=${process.ppid}).`,
+        );
+        process.exitCode = 1;
+        return;
+      }
 
       // Check if already registered
       const existing = getProject(projectRoot);
@@ -64,6 +125,20 @@ Examples:
       // If this is a parent of existing projects, absorb them
       const children = getChildProjects(projectRoot);
       if (children.length > 0) {
+        if (!opts.force) {
+          logBlockedAttempt("would_absorb_children", projectRoot, {
+            children: children.map((c) => ({ name: c.name, root: c.root })),
+          });
+          console.error(
+            `Refusing to add ${projectRoot}: would absorb ${children.length} existing project(s):\n` +
+              `${children.map((c) => `  - ${c.name} (${c.root})`).join("\n")}\n` +
+              `Re-run with --force to proceed (this will REMOVE the listed projects and their indexed data).\n` +
+              `Diagnostic logged to ~/.gmax/logs/blocked-add.log (cwd=${process.cwd()} ppid=${process.ppid}).`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+
         const names = children.map((c) => c.name).join(", ");
         console.log(
           `Absorbing ${children.length} sub-project(s): ${names}`,
