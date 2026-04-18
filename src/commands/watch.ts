@@ -101,7 +101,7 @@ export const watch = new Command("watch")
       process.on("SIGTERM", () => daemon.shutdown().then(() => gracefulExit()));
       process.on("uncaughtException", (err) => {
         console.error("[daemon] uncaughtException:", err);
-        daemon.shutdown().then(() => process.exit(1));
+        daemon.shutdown().then(() => gracefulExit(1));
       });
       process.on("unhandledRejection", (reason) => {
         console.error("[daemon] unhandledRejection:", reason);
