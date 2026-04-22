@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const _path = require("node:path");
-const { spawn, execFileSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 
 function readStdin() {
   return new Promise((resolve) => {
@@ -34,51 +34,19 @@ function isProjectRegistered(dir) {
   }
 }
 
-function isGitRepo(dir) {
-  try {
-    // Walk up to find .git (handles worktrees and nested repos)
-    let current = dir;
-    while (current !== _path.dirname(current)) {
-      if (fs.existsSync(_path.join(current, ".git"))) return true;
-      current = _path.dirname(current);
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 async function main() {
   const input = await readStdin();
   const newCwd = input.new_cwd || process.cwd();
 
-  // Already indexed — nothing to do
-  if (isProjectRegistered(newCwd)) return;
+  if (!isProjectRegistered(newCwd)) return;
 
-  // Only auto-add git repos
-  if (!isGitRepo(newCwd)) return;
-
-  // Spawn `gmax add` fully detached so it doesn't block the hook timeout
   try {
-    const child = spawn("gmax", ["add", newCwd], {
-      detached: true,
-      stdio: "ignore",
-    });
-    child.unref();
+    execFileSync("gmax", ["watch", "--daemon", "-b"], { timeout: 5000, stdio: "ignore" });
   } catch {
-    // gmax not in PATH or spawn failed — silently ignore
-    return;
+    try {
+      execFileSync("gmax", ["watch", "-b"], { timeout: 5000, stdio: "ignore" });
+    } catch {}
   }
-
-  // Tell Claude that indexing is starting
-  const dirName = _path.basename(newCwd);
-  const response = {
-    hookSpecificOutput: {
-      hookEventName: "CwdChanged",
-      additionalContext: `gmax: indexing "${dirName}" in background. Search results may be incomplete until indexing finishes. Run Bash(gmax status) to check progress.`,
-    },
-  };
-  process.stdout.write(JSON.stringify(response));
 }
 
 main();

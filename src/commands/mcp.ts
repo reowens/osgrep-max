@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -327,8 +326,6 @@ export const mcp = new Command("mcp")
     let _searcher: Searcher | null = null;
     let _skeletonizer: Skeletonizer | null = null;
     let _indexReady = false;
-    let _indexing = false;
-    let _indexProgress = "";
 
     const cleanup = async () => {
       if (_vectorDb) {
@@ -399,76 +396,15 @@ export const mcp = new Command("mcp")
 
     // --- Index sync ---
 
-    let _indexChildPid: number | null = null;
-
-    function isIndexProcessRunning(): boolean {
-      if (!_indexChildPid) return false;
-      try {
-        process.kill(_indexChildPid, 0);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
     async function ensureIndexReady(): Promise<void> {
       if (_indexReady) return;
 
-      // Check if a previously spawned index process finished
-      if (_indexing && !isIndexProcessRunning()) {
-        _indexing = false;
-        _indexProgress = "";
-        _indexChildPid = null;
-      }
-
-      // Check project registry — more reliable than querying the DB.
-      // Avoids false negatives from lock contention and cascade re-indexing.
       const projects = listProjects();
       const isRegistered = projects.some((p) => p.root === projectRoot);
 
       if (isRegistered) {
         _indexReady = true;
-        return;
       }
-
-      // Truly first-time: no registry entry at all
-      if (_indexing) return;
-
-      _indexing = true;
-      _indexProgress = "starting...";
-      console.log("[MCP] First-time setup for this project...");
-
-      const child = spawn(
-        process.argv[0],
-        [process.argv[1], "add", projectRoot],
-        { detached: true, stdio: "ignore" },
-      );
-      _indexChildPid = child.pid ?? null;
-      child.unref();
-      _indexProgress = `PID ${_indexChildPid}`;
-
-      const indexTimeout = setTimeout(() => {
-        try { child.kill("SIGKILL"); } catch {}
-        _indexing = false;
-        _indexProgress = "";
-        _indexChildPid = null;
-        console.error("[MCP] Background indexing timed out after 30 minutes");
-      }, 30 * 60 * 1000);
-
-      child.on("exit", (code) => {
-        clearTimeout(indexTimeout);
-        _indexing = false;
-        _indexProgress = "";
-        _indexChildPid = null;
-        if (code === 0) {
-          _indexReady = true;
-          console.log("[MCP] First-time setup complete.");
-        } else {
-          console.error(
-            `[MCP] Indexing failed (exit code: ${code})`,
-          );
-        }
-      });
     }
 
     // --- Background watcher ---
@@ -498,15 +434,13 @@ export const mcp = new Command("mcp")
 
       ensureWatcher();
 
-      if (_indexing) {
-        return ok(
-          `Indexing in progress (${_indexProgress}). Results may be incomplete or empty — try again shortly.`,
+      const proj = getProject(projectRoot);
+      if (!proj) {
+        return err(
+          "Project not added to gmax yet. Run `gmax add` to index it first.",
         );
       }
-
-      // Check if project is pending or has no chunks
-      const proj = getProject(projectRoot);
-      if (proj?.status === "pending" || (proj && proj.chunkCount === 0)) {
+      if (proj.status === "pending" || proj.chunkCount === 0) {
         return err(
           "Project not indexed yet. Run `gmax add` to index it first.",
         );
@@ -969,9 +903,10 @@ export const mcp = new Command("mcp")
       const symbol = String(args.symbol || "");
       if (!symbol) return err("Missing required parameter: symbol");
 
-      if (_indexing) {
-        return ok(
-          `Indexing in progress (${_indexProgress}). trace_calls requires a complete index — try again shortly.`,
+      const proj = getProject(projectRoot);
+      if (!proj) {
+        return err(
+          "Project not added to gmax yet. Run `gmax add` to index it first.",
         );
       }
 
@@ -1340,9 +1275,10 @@ export const mcp = new Command("mcp")
       const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
       const pathPrefix = typeof args.path === "string" ? args.path : undefined;
 
-      if (_indexing) {
-        return ok(
-          `Indexing in progress (${_indexProgress}). list_symbols requires a complete index — try again shortly.`,
+      const proj = getProject(projectRoot);
+      if (!proj) {
+        return err(
+          "Project not added to gmax yet. Run `gmax add` to index it first.",
         );
       }
 
@@ -1451,10 +1387,6 @@ export const mcp = new Command("mcp")
           }
         }
 
-        const indexingLine = _indexing
-          ? `Indexing: in progress (${_indexProgress})`
-          : "";
-
         const lines = [
           `Index: ~/.gmax/lancedb (${stats.chunks} chunks, ${fileCount} files)`,
           `Model: ${globalConfig.embedMode === "gpu" ? (MODEL_TIERS[globalConfig.modelTier]?.mlxModel ?? config?.embedModel ?? "unknown") : (config?.embedModel ?? "unknown")} (${config?.vectorDim ?? "?"}d, ${globalConfig.embedMode})`,
@@ -1462,7 +1394,6 @@ export const mcp = new Command("mcp")
             ? `Last indexed: ${config.indexedAt}`
             : "",
           watcherLine,
-          indexingLine,
           "",
           "Indexed directories:",
           ...(await Promise.all(
