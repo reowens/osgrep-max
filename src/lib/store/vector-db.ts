@@ -27,6 +27,16 @@ export class DiskPressureError extends Error {
   }
 }
 
+/**
+ * Detects "Not found: <hash>.lance" errors from LanceDB — these indicate the
+ * manifest references a fragment file that doesn't exist on disk, typically
+ * caused by an interrupted compaction. Recovery requires `gmax index --reset`.
+ */
+export function isLanceCorruptionError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Not found:.*\.lance(?:[^a-z]|$)/i.test(msg);
+}
+
 const TABLE_NAME = "chunks";
 
 const MAINTENANCE_INTERVAL_MS = 5 * 60 * 1000;
@@ -37,7 +47,9 @@ export class VectorDB {
   private closed = false;
   private readonly vectorDim: number;
   private maintenanceRunning = false;
+  private maintenancePromise: Promise<void> | null = null;
   private maintenanceTimer: ReturnType<typeof setInterval> | null = null;
+  private lastCorruptionLogMs = 0;
   diskPressure: DiskPressureLevel = "ok";
   private lastDiskCheckMs = 0;
   private lastLoggedPressure: DiskPressureLevel = "ok";
@@ -63,15 +75,49 @@ export class VectorDB {
    */
   startMaintenanceLoop(): void {
     if (this.maintenanceTimer) return;
-    this.maintenanceTimer = setInterval(async () => {
+    this.maintenanceTimer = setInterval(() => {
       if (this.closed) return;
-      try {
-        await this.runMaintenance();
-      } catch (err) {
-        log("vectordb", `Periodic maintenance failed: ${err}`);
-      }
+      // Skip if a previous tick is still running so close() has a single
+      // promise to await instead of a chain.
+      if (this.maintenancePromise) return;
+      const run = (async () => {
+        try {
+          await this.runMaintenance();
+        } catch (err) {
+          // Suppress the expected close-race error so it stops polluting logs.
+          // close() awaits maintenancePromise, but the timer can fire and start
+          // a tick microseconds before shutdown sets `closed`, in which case
+          // getDb() throws after we've nulled `db`.
+          const msg = err instanceof Error ? err.message : String(err);
+          if (this.closed && msg.includes("VectorDB connection is closed")) return;
+          if (isLanceCorruptionError(err)) {
+            // Log once per hour at most — repeating this every 5 min is just noise.
+            const now = Date.now();
+            if (now - this.lastCorruptionLogMs > 60 * 60 * 1000) {
+              this.lastCorruptionLogMs = now;
+              log(
+                "vectordb",
+                `CORRUPTION: LanceDB manifest references a missing fragment file. ` +
+                  `This is usually caused by an interrupted compaction. ` +
+                  `To repair, run: gmax index --reset (per-project). Original: ${msg}`,
+              );
+            }
+            return;
+          }
+          log("vectordb", `Periodic maintenance failed: ${err}`);
+        }
+      })();
+      this.maintenancePromise = run.finally(() => {
+        if (this.maintenancePromise === run) this.maintenancePromise = null;
+      });
     }, MAINTENANCE_INTERVAL_MS);
     this.maintenanceTimer.unref();
+  }
+
+  /** True iff a maintenance tick is currently running. Used by the daemon to
+   *  defer idle shutdown so we don't tear down LanceDB mid-optimize. */
+  isMaintenanceActive(): boolean {
+    return this.maintenancePromise !== null;
   }
 
   /** Pause the maintenance timer (e.g. during a full index that calls runMaintenance itself). */
@@ -400,34 +446,52 @@ export class VectorDB {
     }
   }
 
-  async createFTSIndex(rebuild = false): Promise<void> {
+  async createFTSIndex(rebuild = false, retries = 5): Promise<void> {
     const table = await this.ensureTable();
     if (rebuild) {
       try {
         await table.dropIndex("content_idx");
       } catch {}
     }
-    try {
-      await table.createIndex("content", {
-        config: lancedb.Index.fts({ withPosition: true }),
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("already exists")) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        await table.createIndex("content", {
+          config: lancedb.Index.fts({ withPosition: true }),
+        });
+        return;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("already exists")) {
+          return;
+        }
+        // Retry on the same Lance commit-conflict pattern that optimize() handles —
+        // FTS rebuild and compaction race when both try to write the manifest.
+        if (
+          attempt < retries &&
+          (msg.includes("conflict") || msg.includes("Retryable"))
+        ) {
+          const delay = 1000 * 2 ** (attempt - 1);
+          log(
+            "vectordb",
+            `createFTSIndex conflict (attempt ${attempt}/${retries}), retrying in ${delay}ms`,
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        // If position error, try dropping and recreating once
+        if (msg.includes("position")) {
+          try {
+            await table.dropIndex("content_idx");
+            await table.createIndex("content", {
+              config: lancedb.Index.fts({ withPosition: true }),
+            });
+            log("vectordb", "Rebuilt FTS index with position support");
+            return;
+          } catch {}
+        }
+        console.warn("Failed to create FTS index:", e);
         return;
       }
-      // If position error, try dropping and recreating
-      if (msg.includes("position")) {
-        try {
-          await table.dropIndex("content_idx");
-          await table.createIndex("content", {
-            config: lancedb.Index.fts({ withPosition: true }),
-          });
-          log("vectordb", "Rebuilt FTS index with position support");
-          return;
-        } catch {}
-      }
-      console.warn("Failed to create FTS index:", e);
     }
   }
 
@@ -753,6 +817,15 @@ export class VectorDB {
     if (this.maintenanceTimer) {
       clearInterval(this.maintenanceTimer);
       this.maintenanceTimer = null;
+    }
+    // Drain in-flight maintenance before tearing down the connection — otherwise
+    // optimize/createIndex will hit a null db and log "VectorDB connection is closed".
+    if (this.maintenancePromise) {
+      await Promise.race([
+        this.maintenancePromise,
+        new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+      ]);
+      this.maintenancePromise = null;
     }
     this.unregisterCleanup?.();
     this.unregisterCleanup = undefined;

@@ -7,7 +7,7 @@ import { INDEXABLE_EXTENSIONS } from "../../config";
 import { isFileCached } from "../utils/cache-check";
 import { computeBufferHash, isIndexableFile } from "../utils/file-utils";
 import { log } from "../utils/logger";
-import { DiskPressureError } from "../store/vector-db";
+import { DiskPressureError, isLanceCorruptionError } from "../store/vector-db";
 import { getWorkerPool } from "../workers/pool";
 import { computeRetryAction } from "./watcher-batch";
 
@@ -43,6 +43,7 @@ export class ProjectBatchProcessor {
   private processing = false;
   private closed = false;
   private currentBatchAc: AbortController | null = null;
+  private lastCorruptionLogMs = 0;
 
   constructor(opts: BatchProcessorOptions) {
     this.projectRoot = opts.projectRoot;
@@ -283,6 +284,23 @@ export class ProjectBatchProcessor {
         log(this.wtag, "Disk pressure — requeued batch, will retry in 60s");
         // Use batchTimeoutMs slot to signal finally not to reschedule at 2s
         backoffOverrideMs = 60_000;
+      } else if (isLanceCorruptionError(err)) {
+        // Manifest references a missing fragment — retrying every 2s burns CPU
+        // and floods logs without making progress. Log once per hour, drop the
+        // batch (per-file retries would just re-fail), and back off 30 min so a
+        // human can run `gmax index --reset` for the affected project.
+        const now = Date.now();
+        if (now - this.lastCorruptionLogMs > 60 * 60 * 1000) {
+          this.lastCorruptionLogMs = now;
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[${this.wtag}] DATA CORRUPTION: LanceDB manifest references a missing fragment. ` +
+              `Backing off this project's batch processor for 30 min. ` +
+              `To repair, run: gmax index --reset (in ${this.projectRoot}). Original: ${msg}`,
+          );
+        }
+        for (const [absPath] of batch) this.retryCount.delete(absPath);
+        backoffOverrideMs = 30 * 60 * 1000;
       } else {
         console.error(`[${this.wtag}] Batch processing failed:`, err);
 
