@@ -10,6 +10,16 @@ export const testFind = new Command("test")
   .argument("<target>", "Symbol name or file path")
   .option("-d, --depth <n>", "Caller traversal depth (default 1, max 3)", "1")
   .option("--root <dir>", "Project root directory")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--agent", "Compact output for AI agents", false)
   .action(async (target, opts) => {
     const depth = Math.min(
@@ -41,7 +51,23 @@ export const testFind = new Command("test")
         return;
       }
 
-      const tests = await findTests(symbols, vectorDb, projectRoot, depth);
+      const { resolveScope } = await import("../lib/utils/scope-filter");
+      const scope = resolveScope({
+        projectRoot,
+        in: opts.in,
+        exclude: opts.exclude,
+      });
+      const queryRoot =
+        opts.in && opts.in.length > 0
+          ? scope.pathPrefix.replace(/\/$/, "")
+          : projectRoot;
+      const tests = await findTests(
+        symbols,
+        vectorDb,
+        queryRoot,
+        depth,
+        scope.excludePrefixes,
+      );
 
       if (tests.length === 0) {
         console.log(`No tests found for ${target}.`);

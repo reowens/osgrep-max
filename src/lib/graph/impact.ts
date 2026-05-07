@@ -68,19 +68,24 @@ async function expandFileSymbols(
   symbols: string[],
   vectorDb: VectorDB,
   projectRoot: string,
+  excludePrefixes?: string[],
 ): Promise<string[]> {
   if (symbols.length !== 1) return symbols;
 
   const table = await vectorDb.ensureTable();
   const prefix = projectRoot.endsWith("/") ? projectRoot : `${projectRoot}/`;
 
+  let where = `array_contains(defined_symbols, '${escapeSqlString(symbols[0])}') AND path LIKE '${escapeSqlString(prefix)}%'`;
+  for (const ex of excludePrefixes ?? []) {
+    const exNorm = ex.endsWith("/") ? ex : `${ex}/`;
+    where += ` AND path NOT LIKE '${escapeSqlString(exNorm)}%'`;
+  }
+
   // Find the file that defines this symbol
   const defRows = await table
     .query()
     .select(["path"])
-    .where(
-      `array_contains(defined_symbols, '${escapeSqlString(symbols[0])}') AND path LIKE '${escapeSqlString(prefix)}%'`,
-    )
+    .where(where)
     .limit(1)
     .toArray();
 
@@ -111,12 +116,18 @@ export async function findTests(
   vectorDb: VectorDB,
   projectRoot: string,
   depth = 1,
+  excludePrefixes?: string[],
 ): Promise<TestHit[]> {
-  const graphBuilder = new GraphBuilder(vectorDb, projectRoot);
+  const graphBuilder = new GraphBuilder(vectorDb, projectRoot, excludePrefixes);
   const testHits = new Map<string, TestHit>(); // key: file+symbol
 
   // Expand single-symbol targets to include all symbols from the same file
-  const expanded = await expandFileSymbols(symbols, vectorDb, projectRoot);
+  const expanded = await expandFileSymbols(
+    symbols,
+    vectorDb,
+    projectRoot,
+    excludePrefixes,
+  );
 
   for (const symbol of expanded) {
     await walkCallers(symbol, graphBuilder, testHits, 0, depth, new Set());
@@ -167,9 +178,14 @@ export async function findDependents(
   projectRoot: string,
   excludePaths?: Set<string>,
   limit = 10,
+  excludePrefixes?: string[],
 ): Promise<DependentHit[]> {
   const table = await vectorDb.ensureTable();
-  const pathScope = `path LIKE '${escapeSqlString(projectRoot)}/%'`;
+  let pathScope = `path LIKE '${escapeSqlString(projectRoot)}/%'`;
+  for (const ex of excludePrefixes ?? []) {
+    const exNorm = ex.endsWith("/") ? ex : `${ex}/`;
+    pathScope += ` AND path NOT LIKE '${escapeSqlString(exNorm)}%'`;
+  }
   const counts = new Map<string, number>();
 
   for (const sym of symbols) {

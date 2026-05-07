@@ -16,6 +16,16 @@ export const impact = new Command("impact")
   .argument("<target>", "Symbol name or file path")
   .option("-d, --depth <n>", "Caller traversal depth (default 1, max 3)", "1")
   .option("--root <dir>", "Project root directory")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--agent", "Compact output for AI agents", false)
   .action(async (target, opts) => {
     const depth = Math.min(
@@ -53,10 +63,32 @@ export const impact = new Command("impact")
         : undefined;
       const excludePaths = targetPath ? new Set([targetPath]) : undefined;
 
+      const { resolveScope } = await import("../lib/utils/scope-filter");
+      const scope = resolveScope({
+        projectRoot,
+        in: opts.in,
+        exclude: opts.exclude,
+      });
+      // Treat --in as an exclude-everything-else when set: any prefix that
+      // isn't the --in scope becomes effectively excluded. Today findDependents
+      // always queries within projectRoot; passing scope.pathPrefix when --in
+      // is set narrows it. Reuse the existing projectRoot semantic when no --in.
+      const queryRoot =
+        opts.in && opts.in.length > 0
+          ? scope.pathPrefix.replace(/\/$/, "")
+          : projectRoot;
+
       // Run dependents and tests in parallel
       const [dependents, tests] = await Promise.all([
-        findDependents(symbols, vectorDb, projectRoot, excludePaths),
-        findTests(symbols, vectorDb, projectRoot, depth),
+        findDependents(
+          symbols,
+          vectorDb,
+          queryRoot,
+          excludePaths,
+          undefined,
+          scope.excludePrefixes,
+        ),
+        findTests(symbols, vectorDb, queryRoot, depth, scope.excludePrefixes),
       ]);
 
       // Separate test files from non-test dependents

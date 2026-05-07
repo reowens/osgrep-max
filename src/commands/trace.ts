@@ -41,6 +41,16 @@ export const trace = new Command("trace")
   .argument("<symbol>", "The symbol to trace")
   .option("-d, --depth <n>", "Caller traversal depth (default 1, max 3)", "1")
   .option("--root <dir>", "Project root directory")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--agent", "Compact output for AI agents", false)
   .action(async (symbol, opts) => {
     const depth = Math.min(
@@ -57,7 +67,17 @@ export const trace = new Command("trace")
 
       vectorDb = new VectorDB(paths.lancedbDir);
 
-      const graphBuilder = new GraphBuilder(vectorDb, projectRoot);
+      const { resolveScope } = await import("../lib/utils/scope-filter");
+      const scope = resolveScope({
+        projectRoot,
+        in: opts.in,
+        exclude: opts.exclude,
+      });
+      const graphBuilder = new GraphBuilder(
+        vectorDb,
+        scope.pathPrefix,
+        scope.excludePrefixes,
+      );
       const graph = await graphBuilder.buildGraphMultiHop(symbol, depth);
       if (opts.agent) {
         console.log(formatTraceAgent(graph, projectRoot));
