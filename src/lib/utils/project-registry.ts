@@ -102,3 +102,31 @@ export function getChildProjects(root: string): ProjectEntry[] {
     (e) => e.root !== root && e.root.startsWith(prefix),
   );
 }
+
+/**
+ * Resolve a `--root` argument that may be either a path or a registered
+ * project name. Throws on no-match or duplicate-name so callers can
+ * report a uniform error.
+ */
+export function resolveProjectRoot(arg: string): string {
+  if (arg.includes("/") || arg.includes("\\")) return path.resolve(arg);
+  const resolved = path.resolve(arg);
+  if (fs.existsSync(resolved)) return resolved;
+
+  const matches = loadRegistry().filter((p) => p.name === arg);
+  if (matches.length === 1) return matches[0].root;
+  if (matches.length === 0) {
+    const all = loadRegistry();
+    const list =
+      all.length > 0
+        ? all.map((p) => `  ${p.name.padEnd(24)} ${p.root}`).join("\n")
+        : "  (none registered)";
+    throw new Error(
+      `No registered project named "${arg}".\nAvailable:\n${list}`,
+    );
+  }
+  const paths = matches.map((p) => `  ${p.root}`).join("\n");
+  throw new Error(
+    `Multiple registered projects named "${arg}":\n${paths}\nPass an absolute path to disambiguate.`,
+  );
+}

@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { Command } from "commander";
@@ -9,8 +8,8 @@ import { killProcess } from "../lib/utils/process";
 import { removeMarker } from "../lib/utils/project-marker";
 import {
   getProject,
-  listProjects,
   removeProject,
+  resolveProjectRoot,
 } from "../lib/utils/project-registry";
 import { ensureProjectPaths, findProjectRoot } from "../lib/utils/project-root";
 import {
@@ -50,43 +49,21 @@ Examples:
     let metaCache: MetaCache | null = null;
 
     try {
-      // Resolve name → registered root when arg has no path separator and isn't a dir.
-      // Avoids the footgun where a typo'd name silently removed the cwd project.
-      let resolvedDir = dir;
-      if (
-        dir &&
-        !dir.includes("/") &&
-        !dir.includes("\\") &&
-        !fs.existsSync(path.resolve(dir))
-      ) {
-        const matches = listProjects().filter((p) => p.name === dir);
-        if (matches.length === 0) {
-          console.error(`No registered project named "${dir}".`);
-          const all = listProjects();
-          if (all.length > 0) {
-            console.error("Available projects:");
-            for (const p of all) {
-              console.error(`  ${p.name.padEnd(24)} ${p.root}`);
-            }
-          } else {
-            console.error("No projects are currently registered.");
-          }
+      // Resolve name → registered root when arg has no path separator and
+      // isn't a dir. Avoids the footgun where a typo'd name silently removed
+      // the cwd project.
+      let targetDir: string;
+      if (dir) {
+        try {
+          targetDir = resolveProjectRoot(dir);
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
           process.exitCode = 1;
           return;
         }
-        if (matches.length > 1) {
-          console.error(`Multiple registered projects named "${dir}":`);
-          for (const p of matches) {
-            console.error(`  ${p.root}`);
-          }
-          console.error("Pass an absolute path to disambiguate.");
-          process.exitCode = 1;
-          return;
-        }
-        resolvedDir = matches[0].root;
+      } else {
+        targetDir = process.cwd();
       }
-
-      const targetDir = resolvedDir ? path.resolve(resolvedDir) : process.cwd();
       const projectRoot = findProjectRoot(targetDir) ?? targetDir;
       const projectName = path.basename(projectRoot);
       const project = getProject(projectRoot);
