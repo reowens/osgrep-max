@@ -430,6 +430,14 @@ export class TreeSitterChunker {
       const parentType = node.parent?.type || "";
       const allowedParents = ["program", "module", "source_file", "class_body", "export_statement"];
       if (parentType && !allowedParents.includes(parentType)) return false;
+      // Exported declarations are part of the API surface, so always index
+      // them regardless of RHS shape. Without this, files whose only export
+      // is `export const typeDefs = gql\`...\`` (template literals, object
+      // literals, or non-PascalCase consts) had no defined_symbols entry
+      // and peek/extract returned "Symbol not found".
+      if (parentType === "export_statement" || parentType === "export_declaration") {
+        return true;
+      }
       const text = node.text || "";
       if (text.includes("=>")) return true;
       if (text.includes("function ")) return true;

@@ -60,6 +60,25 @@ function example() {}`;
     expect(anchor.content).toContain("Top comments:");
   });
 
+  it("indexes exported const declarations regardless of RHS shape", async () => {
+    const chunker = new TreeSitterChunker();
+    const content = [
+      'export const typeDefs = `',
+      "  type Query { hello: String }",
+      "`;",
+      "",
+      "export const config = { foo: 1 };",
+      "",
+      "export const upper = lower.toUpperCase();",
+    ].join("\n");
+
+    const { chunks } = await chunker.chunk("schema.ts", content);
+    const defined = chunks.flatMap((c) => c.definedSymbols ?? []);
+    expect(defined).toContain("typeDefs");
+    expect(defined).toContain("config");
+    expect(defined).toContain("upper");
+  });
+
   it("formatChunkText adds file breadcrumb when missing", () => {
     const { displayText } = formatChunkText(
       {
