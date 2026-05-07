@@ -14,6 +14,16 @@ export const similar = new Command("similar")
   .option("-m, --max-count <n>", "Max results (default 5)", "5")
   .option("--threshold <score>", "Min similarity 0-1 (default 0)")
   .option("--root <dir>", "Project root directory")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--agent", "Compact output for AI agents", false)
   .action(async (target, opts) => {
     const limit = Math.min(
@@ -76,7 +86,15 @@ export const similar = new Command("similar")
       }
 
       // Vector search using the source chunk's embedding
-      const pathScope = `path LIKE '${escapeSqlString(projectRoot)}/%'`;
+      const { resolveScope, buildScopeWhere } = await import(
+        "../lib/utils/scope-filter"
+      );
+      const scope = resolveScope({
+        projectRoot,
+        in: opts.in,
+        exclude: opts.exclude,
+      });
+      const pathScope = buildScopeWhere(scope);
       const results = await table
         .vectorSearch(sourceVector)
         .select([

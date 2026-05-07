@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { escapeSqlString } from "./filter-builder";
 
 export interface ScopeOptions {
   projectRoot: string;
@@ -63,4 +64,29 @@ export function resolveScope(opts: ScopeOptions): ResolvedScope {
     inPrefixes: inPrefixesAll,
     excludePrefixes,
   };
+}
+
+/**
+ * Compose a SQL WHERE clause that AND-applies the resolved scope to an
+ * existing condition. Used by symbol commands that build their own table
+ * queries (peek/extract/similar/related) instead of going through
+ * Searcher.buildWhereClause or GraphBuilder.scopeWhere.
+ */
+export function buildScopeWhere(
+  scope: ResolvedScope,
+  condition?: string,
+): string {
+  const parts: string[] = [];
+  if (condition) parts.push(condition);
+  parts.push(`path LIKE '${escapeSqlString(scope.pathPrefix)}%'`);
+  for (const ex of scope.excludePrefixes) {
+    parts.push(`path NOT LIKE '${escapeSqlString(ex)}%'`);
+  }
+  if (scope.inPrefixes.length > 0) {
+    const ors = scope.inPrefixes
+      .map((p) => `path LIKE '${escapeSqlString(p)}%'`)
+      .join(" OR ");
+    parts.push(`(${ors})`);
+  }
+  return parts.join(" AND ");
 }

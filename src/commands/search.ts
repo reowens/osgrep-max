@@ -15,6 +15,7 @@ import { getStoredSkeleton } from "../lib/skeleton/retriever";
 import type {
   ChunkType,
   FileMetadata,
+  SearchFilter,
   SearchResponse,
 } from "../lib/store/types";
 import { VectorDB } from "../lib/store/vector-db";
@@ -434,7 +435,16 @@ export const search: Command = new CommanderCommand("search")
   )
   .option("--root <dir>", "Search a different project directory")
   .option("--file <name>", "Filter to files matching this name (e.g. 'syncer.ts')")
-  .option("--exclude <prefix>", "Exclude files under this path prefix (e.g. 'tests/')")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable; comma-separated also accepted)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable; e.g. 'tests/')",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--lang <ext>", "Filter by file extension (e.g. 'ts', 'py')")
   .option("--role <role>", "Filter by role: ORCHESTRATION, DEFINITION, IMPLEMENTATION")
   .option("--symbol", "Append call graph after search results", false)
@@ -470,7 +480,8 @@ Examples:
       skeleton: boolean;
       root: string;
       file: string;
-      exclude: string;
+      in?: string[];
+      exclude?: string[];
       lang: string;
       role: string;
       symbol: boolean;
@@ -651,17 +662,37 @@ Examples:
       // and in-process search paths need them. Reuse the resolved checkRoot
       // so --root <name> only resolves once per invocation.
       const effectiveRoot = checkRoot;
-      const searchPathPrefix = exec_path
-        ? path.resolve(exec_path)
-        : effectiveRoot;
-      const pathFilter = searchPathPrefix.endsWith("/")
-        ? searchPathPrefix
-        : `${searchPathPrefix}/`;
-      const searchFilters: Record<string, string> = {};
+
+      // --in / --exclude / [path positional] composition. --in wins over the
+      // positional [path] when both are given (positional was the older
+      // shape; --in is canonical going forward).
+      if (exec_path && options.in && options.in.length > 0) {
+        console.warn(
+          "Warning: --in overrides positional [path]; using --in.",
+        );
+      }
+      const { resolveScope } = await import("../lib/utils/scope-filter");
+      const scope = resolveScope({
+        projectRoot: effectiveRoot,
+        in: options.in,
+        exclude: options.exclude,
+      });
+      const pathFilter =
+        options.in && options.in.length > 0
+          ? scope.pathPrefix
+          : exec_path
+            ? (() => {
+                const p = path.resolve(exec_path);
+                return p.endsWith("/") ? p : `${p}/`;
+              })()
+            : scope.pathPrefix;
+      const searchFilters: Record<string, unknown> = {};
       if (options.file) searchFilters.file = options.file;
-      if (options.exclude) searchFilters.exclude = options.exclude;
       if (options.lang) searchFilters.language = options.lang;
       if (options.role) searchFilters.role = options.role;
+      if (scope.inPrefixes.length > 0) searchFilters.inPrefixes = scope.inPrefixes;
+      if (scope.excludePrefixes.length > 0)
+        searchFilters.excludePrefixes = scope.excludePrefixes;
 
       // Daemon-mediated search: ships query+args over IPC, daemon runs the
       // hybrid+rerank against its already-warm VectorDB and worker pool.
@@ -820,7 +851,9 @@ Examples:
         pattern,
         parseInt(options.m, 10),
         { rerank: true, explain: options.explain },
-        Object.keys(searchFilters).length > 0 ? searchFilters : undefined,
+        Object.keys(searchFilters).length > 0
+          ? (searchFilters as SearchFilter)
+          : undefined,
         pathFilter,
       );
       } // end if (!searchResult) — in-process fallback

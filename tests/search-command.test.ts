@@ -302,7 +302,7 @@ describe("search filter passthrough", () => {
     spy.mockRestore();
   });
 
-  it("passes --exclude as exclude filter", async () => {
+  it("passes --exclude as resolved excludePrefixes array", async () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     await (search as Command).parseAsync(
       ["query", "--exclude", "tests/", "--plain"],
@@ -312,8 +312,28 @@ describe("search filter passthrough", () => {
       "query",
       expect.any(Number),
       expect.objectContaining({ rerank: true }),
-      expect.objectContaining({ exclude: "tests/" }),
+      expect.objectContaining({
+        excludePrefixes: expect.arrayContaining([
+          expect.stringMatching(/\/tests\/$/),
+        ]),
+      }),
       expect.any(String),
+    );
+    spy.mockRestore();
+  });
+
+  it("passes --in as resolved pathPrefix (single-in collapses)", async () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await (search as Command).parseAsync(
+      ["query", "--in", "packages/api", "--plain"],
+      { from: "user" },
+    );
+    expect(mockSearcher.search).toHaveBeenCalledWith(
+      "query",
+      expect.any(Number),
+      expect.objectContaining({ rerank: true }),
+      undefined,
+      expect.stringMatching(/\/packages\/api\/$/),
     );
     spy.mockRestore();
   });

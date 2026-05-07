@@ -59,6 +59,16 @@ export const peek = new Command("peek")
   .argument("<symbol>", "The symbol to peek at")
   .option("-d, --depth <n>", "Caller traversal depth (default 1, max 3)", "1")
   .option("--root <dir>", "Project root directory")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--agent", "Compact output for AI agents", false)
   .action(async (symbol, opts) => {
     let vectorDb: VectorDB | null = null;
@@ -74,20 +84,29 @@ export const peek = new Command("peek")
       const paths = ensureProjectPaths(projectRoot);
       vectorDb = new VectorDB(paths.lancedbDir);
 
+      const { resolveScope, buildScopeWhere } = await import(
+        "../lib/utils/scope-filter"
+      );
+      const scope = resolveScope({
+        projectRoot,
+        in: opts.in,
+        exclude: opts.exclude,
+      });
+      const scopeWhere = (cond: string) => buildScopeWhere(scope, cond);
+
       // Cross-language disambiguation: when the symbol is defined in 2+
       // languages, refuse to silently pick one. The graph builder otherwise
       // picks one chunk arbitrarily and lists callers from a different
       // language — verified failure mode.
       {
         const tableForCheck = await vectorDb.ensureTable();
-        const prefixForCheck = projectRoot.endsWith("/")
-          ? projectRoot
-          : `${projectRoot}/`;
         const allDefs = await tableForCheck
           .query()
           .select(["path", "start_line"])
           .where(
-            `array_contains(defined_symbols, '${escapeSqlString(symbol)}') AND path LIKE '${escapeSqlString(prefixForCheck)}%'`,
+            scopeWhere(
+              `array_contains(defined_symbols, '${escapeSqlString(symbol)}')`,
+            ),
           )
           .limit(20)
           .toArray();
@@ -117,7 +136,11 @@ export const peek = new Command("peek")
         }
       }
 
-      const graphBuilder = new GraphBuilder(vectorDb, projectRoot);
+      const graphBuilder = new GraphBuilder(
+        vectorDb,
+        scope.pathPrefix,
+        scope.excludePrefixes,
+      );
       const graph = await graphBuilder.buildGraph(symbol);
 
       if (!graph.center) {
@@ -160,14 +183,13 @@ export const peek = new Command("peek")
 
       // Get chunk metadata for is_exported and end_line
       const table = await vectorDb.ensureTable();
-      const prefix = projectRoot.endsWith("/")
-        ? projectRoot
-        : `${projectRoot}/`;
       const metaRows = await table
         .query()
         .select(["is_exported", "start_line", "end_line"])
         .where(
-          `array_contains(defined_symbols, '${escapeSqlString(symbol)}') AND path LIKE '${escapeSqlString(prefix)}%'`,
+          scopeWhere(
+            `array_contains(defined_symbols, '${escapeSqlString(symbol)}')`,
+          ),
         )
         .limit(1)
         .toArray();

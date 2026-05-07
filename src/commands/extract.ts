@@ -32,12 +32,10 @@ interface ChunkMatch {
 }
 
 async function findSymbolChunks(
-  symbol: string,
   db: VectorDB,
-  projectRoot: string,
+  whereClause: string,
 ): Promise<ChunkMatch[]> {
   const table = await db.ensureTable();
-  const prefix = projectRoot.endsWith("/") ? projectRoot : `${projectRoot}/`;
   const rows = await table
     .query()
     .select([
@@ -48,9 +46,7 @@ async function findSymbolChunks(
       "is_exported",
       "defined_symbols",
     ])
-    .where(
-      `array_contains(defined_symbols, '${escapeSqlString(symbol)}') AND path LIKE '${escapeSqlString(prefix)}%'`,
-    )
+    .where(whereClause)
     .limit(10)
     .toArray();
 
@@ -80,6 +76,16 @@ export const extract = new Command("extract")
   .description("Extract full function/class body by symbol name")
   .argument("<symbol>", "The symbol to extract")
   .option("--root <dir>", "Project root directory")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--agent", "Compact output for AI agents", false)
   .option("--imports", "Prepend file imports", false)
   .action(async (symbol, opts) => {
@@ -92,7 +98,19 @@ export const extract = new Command("extract")
       const paths = ensureProjectPaths(projectRoot);
       vectorDb = new VectorDB(paths.lancedbDir);
 
-      const chunks = await findSymbolChunks(symbol, vectorDb, projectRoot);
+      const { resolveScope, buildScopeWhere } = await import(
+        "../lib/utils/scope-filter"
+      );
+      const scope = resolveScope({
+        projectRoot,
+        in: opts.in,
+        exclude: opts.exclude,
+      });
+      const where = buildScopeWhere(
+        scope,
+        `array_contains(defined_symbols, '${escapeSqlString(symbol)}')`,
+      );
+      const chunks = await findSymbolChunks(vectorDb, where);
 
       if (chunks.length === 0) {
         const lines = [

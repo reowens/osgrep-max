@@ -13,6 +13,16 @@ export const related = new Command("related")
   .argument("<file>", "File path relative to project root")
   .option("-l, --limit <n>", "Max results per direction (default 10)", "10")
   .option("--root <dir>", "Project root directory")
+  .option(
+    "--in <subpath>",
+    "Restrict to a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
+  .option(
+    "--exclude <subpath>",
+    "Exclude a sub-path of the project (repeatable)",
+    (value: string, prev: string[] | undefined) => (prev ? [...prev, value] : [value]),
+  )
   .option("--agent", "Compact output for AI agents", false)
   .action(async (file, opts) => {
     const limit = Math.min(
@@ -30,7 +40,15 @@ export const related = new Command("related")
 
       const absPath = path.resolve(projectRoot, file);
       const table = await vectorDb.ensureTable();
-      const pathScope = `path LIKE '${escapeSqlString(projectRoot)}/%'`;
+      const { resolveScope, buildScopeWhere } = await import(
+        "../lib/utils/scope-filter"
+      );
+      const scope = resolveScope({
+        projectRoot,
+        in: opts.in,
+        exclude: opts.exclude,
+      });
+      const pathScope = buildScopeWhere(scope);
 
       const fileChunks = await table
         .query()
