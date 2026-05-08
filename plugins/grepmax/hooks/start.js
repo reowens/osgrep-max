@@ -187,8 +187,10 @@ Understand:
   gmax trace <symbol>                call graph (--inbound = callers + snippets)
   gmax test <symbol>                 tests for symbol
   gmax impact <symbol>               blast radius
+  gmax related <file>                file deps + dependents
 
 Survey:
+  gmax project                       codebase overview (langs, structure, key symbols)
   gmax skeleton <file>               file structure (file path, NOT a directory)
   gmax context "topic" --budget 4000 multi-file topic summary
   gmax log <path-or-symbol>          git commits (replaces recent/diff)
@@ -196,7 +198,7 @@ Survey:
 
 Scope flags: --root <name|path>, --in <subpath>, --exclude <subpath>.
 Roles in results: [DEFI] [ORCH] [IMPL] [DOCS].
-Recovery: "not added yet" → gmax add; stale results → gmax index.`,
+Recovery: "not added yet" → gmax add; stale → gmax index; broken → gmax doctor --fix.`,
     },
   };
   process.stdout.write(JSON.stringify(response));

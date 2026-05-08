@@ -40,7 +40,7 @@ If search returns "This project hasn't been added to gmax yet", run `Bash(gmax a
 
 ### Search — `gmax "query" --agent`
 
-The `--agent` flag produces compact, token-efficient output for AI agents. It is supported on: `search`, `trace`, `symbols`, `related`, `recent`, `status`, and `project`.
+The `--agent` flag produces compact, token-efficient output for AI agents. It works on most commands — `search`, `peek`, `extract`, `trace`, `test`, `impact`, `similar`, `log`, `related`, `symbols`, `status`, `project`, `context`, `skeleton`, and `doctor`.
 
 ```
 gmax "where do we handle authentication" --agent
@@ -196,12 +196,12 @@ Agentic Q&A: a local LLM autonomously uses gmax tools (search, trace, peek, impa
 ```
 gmax status                                # show all indexed projects
 gmax status --agent                        # compact: name\tchunks\tage\tstatus
-gmax recent --agent                        # compact: path\tage
 gmax related src/file.ts --agent           # compact: dep:/rev: path\tcount
 gmax project --agent                       # compact: key\tvalue pairs
 gmax index                                 # reindex current directory
 gmax config                                # view/change settings
 gmax doctor                                # health check
+gmax doctor --fix                          # auto-repair (compact, prune, clear stale locks)
 gmax llm on/off/start/stop/status          # manage local LLM server
 ```
 
@@ -215,7 +215,7 @@ gmax llm on/off/start/stop/status          # manage local LLM server
 6. **Skeleton** — `Bash(gmax skeleton <path>)` before reading large files, or use `--skeleton` on search
 7. **Read** — `Read file:line` for specific ranges identified by search/skeleton
 8. **Trace** — `Bash(gmax trace <symbol>)` for deep call flow (multi-hop)
-9. **Diff** — `Bash(gmax diff [ref])` to see what changed and search within changes
+9. **Log** — `Bash(gmax log <path-or-symbol>)` for git commit history on a path or symbol
 10. **Test** — `Bash(gmax test <symbol>)` to find tests covering a symbol before editing
 11. **Impact** — `Bash(gmax impact <symbol>)` for blast radius before significant changes
 12. **Similar** — `Bash(gmax similar <symbol>)` to find similar patterns for DRY analysis
@@ -225,7 +225,7 @@ gmax llm on/off/start/stop/status          # manage local LLM server
 
 ## Tips
 
-- **Use `--agent` for compact output** — supported on search, trace, symbols, related, recent, status, project.
+- **Use `--agent` for compact output** — works on most commands: search, peek, extract, trace, log, test, impact, similar, related, status, project, doctor.
 - **Be specific.** 5+ words. "auth" returns noise. "where does the server validate JWT tokens" is specific.
 - **Use `--role ORCHESTRATION`** to skip type definitions and find the actual logic.
 - **Use `--symbol`** when the query is a function/class name — gets search + trace in one call.

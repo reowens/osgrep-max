@@ -60,8 +60,7 @@ gmax symbols auth                       # List indexed symbols
 ### Analysis Commands
 
 ```bash
-gmax diff main                           # Changed files vs main
-gmax diff main --query "auth changes"    # Semantic search within changes
+gmax log src/lib/auth.ts                 # Git commit history for a path or symbol
 gmax test handleAuth                     # Find tests via reverse call graph
 gmax impact handleAuth                   # Dependents + affected tests
 gmax similar handleAuth                  # Find similar code patterns
@@ -73,7 +72,6 @@ gmax context "auth system" --budget 4000 # Token-budgeted topic summary
 ```bash
 gmax project                  # Languages, structure, key symbols
 gmax related src/lib/auth.ts  # Dependencies + dependents
-gmax recent                   # Recently modified files
 gmax status                   # All indexed projects + chunk counts
 ```
 
