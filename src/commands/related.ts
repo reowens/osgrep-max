@@ -118,6 +118,51 @@ export const related = new Command("related")
         .sort((a, b) => b[1] - a[1])
         .slice(0, limit);
 
+      // Mention-based fallback: when symbol intersection turns up nothing
+      // in either direction, look for files in scope whose content mentions
+      // this file's basename. Catches leaf modules with no shared symbols
+      // and side-effect-only imports.
+      const GENERIC_BASENAMES = new Set([
+        "index",
+        "main",
+        "mod",
+        "init",
+        "lib",
+        "types",
+        "util",
+        "utils",
+        "common",
+        "shared",
+      ]);
+      let mentions: string[] = [];
+      let basename = "";
+      let basenameRejected = false;
+      if (topDeps.length === 0 && topRevs.length === 0) {
+        const ext = path.extname(absPath);
+        basename = path.basename(absPath, ext);
+        if (basename.length < 4 || GENERIC_BASENAMES.has(basename.toLowerCase())) {
+          basenameRejected = true;
+        } else {
+          const rows = await table
+            .query()
+            .select(["path"])
+            .where(
+              `content LIKE '%${escapeSqlString(basename)}%' AND ${pathScope}`,
+            )
+            .limit(limit * 4)
+            .toArray();
+          const seen = new Set<string>();
+          for (const row of rows) {
+            const p = String((row as any).path || "");
+            if (!p || p === absPath) continue;
+            if (seen.has(p)) continue;
+            seen.add(p);
+            mentions.push(p);
+            if (mentions.length >= limit) break;
+          }
+        }
+      }
+
       if (opts.agent) {
         const rel = (p: string) =>
           p.startsWith(`${projectRoot}/`)
@@ -130,7 +175,20 @@ export const related = new Command("related")
           console.log(`rev: ${rel(p)}\t${count}`);
         }
         if (!topDeps.length && !topRevs.length) {
-          console.log("(none)");
+          if (basenameRejected) {
+            console.log(
+              `(no semantic neighbors; basename '${basename}' too generic to fall back)`,
+            );
+          } else if (mentions.length > 0) {
+            console.log(
+              `(no semantic neighbors; showing ${mentions.length} files mentioning '${basename}')`,
+            );
+            for (const p of mentions) {
+              console.log(`imp: ${rel(p)}\t1`);
+            }
+          } else {
+            console.log("(none)");
+          }
         }
       } else {
         console.log(`Related files for ${file}:\n`);
@@ -163,6 +221,23 @@ export const related = new Command("related")
           }
         } else {
           console.log("Dependents: none found");
+        }
+
+        if (topDeps.length === 0 && topRevs.length === 0) {
+          console.log("");
+          if (basenameRejected) {
+            console.log(
+              `(basename '${basename}' too generic to fall back to mentions)`,
+            );
+          } else if (mentions.length > 0) {
+            console.log(`Mentions of "${basename}" in other files:`);
+            for (const p of mentions) {
+              const rel = p.startsWith(`${projectRoot}/`)
+                ? p.slice(projectRoot.length + 1)
+                : p;
+              console.log(`  ${rel}`);
+            }
+          }
         }
       }
     } catch (error) {
