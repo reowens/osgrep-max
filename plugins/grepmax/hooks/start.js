@@ -175,8 +175,28 @@ async function main() {
   const response = {
     hookSpecificOutput: {
       hookEventName: "SessionStart",
-      additionalContext:
-        'gmax ready. Use Bash(gmax "query" --agent) for search (one line per result, 89% fewer tokens). Bash(gmax extract <symbol>) for full function body. Bash(gmax peek <symbol>) for quick overview (sig+callers+callees). Bash(gmax trace <symbol>) for call graphs. Bash(gmax skeleton <path>) for structure. Bash(gmax diff [ref]) for git changes. Bash(gmax test <symbol>) for test coverage. Bash(gmax impact <symbol>) for blast radius. Bash(gmax similar <symbol>) for similar code. Bash(gmax context "topic" --budget 4000) for topic summary. Bash(gmax status) to check indexed projects. Role tags in results: [DEFI]=definition, [ORCH]=orchestration, [IMPL]=implementation, [DOCS]=docs. --agent flag works on search, trace, symbols, related, recent, status, project, extract, peek, diff, test, impact, similar. If search says "not added yet", run Bash(gmax add). If results look stale, run Bash(gmax index) to repair.',
+      additionalContext: `gmax ready. Add --agent to any command for compact output (~89% fewer tokens).
+
+Find:
+  gmax "topic"                       semantic search
+  gmax similar <symbol>              similar code
+
+Understand:
+  gmax peek <symbol>                 signature + callers + callees + tests
+  gmax extract <symbol>              full body + tests
+  gmax trace <symbol>                call graph (--inbound = callers + snippets)
+  gmax test <symbol>                 tests for symbol
+  gmax impact <symbol>               blast radius
+
+Survey:
+  gmax skeleton <file>               file structure (file path, NOT a directory)
+  gmax context "topic" --budget 4000 multi-file topic summary
+  gmax log <path-or-symbol>          git commits (replaces recent/diff)
+  gmax status                        indexed projects
+
+Scope flags: --root <name|path>, --in <subpath>, --exclude <subpath>.
+Roles in results: [DEFI] [ORCH] [IMPL] [DOCS].
+Recovery: "not added yet" → gmax add; stale results → gmax index.`,
     },
   };
   process.stdout.write(JSON.stringify(response));

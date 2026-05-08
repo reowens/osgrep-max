@@ -52,7 +52,7 @@ async function main() {
     hookSpecificOutput: {
       hookEventName: "SubagentStart",
       additionalContext:
-        'gmax semantic search is available. Use Bash(gmax "query" --agent) for concept search, Bash(gmax peek <symbol>) for overview, Bash(gmax extract <symbol>) for full body, Bash(gmax trace <symbol>) for call graph. If results look stale, run Bash(gmax index) to repair.',
+        'gmax available: gmax "query" --agent (search), gmax peek/extract/trace <symbol> --agent (symbol info / call graph). Stale results → gmax index.',
     },
   };
   process.stdout.write(JSON.stringify(response));
