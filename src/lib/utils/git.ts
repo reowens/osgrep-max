@@ -83,6 +83,110 @@ export function getChangedFiles(
   }
 }
 
+export interface Commit {
+  hash: string;
+  shortHash: string;
+  author: string;
+  isoDate: string;
+  relDate: string;
+  subject: string;
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+  numstatLines: { added: number; removed: number; path: string }[];
+}
+
+export interface CommitHistoryOpts {
+  paths: string[];
+  limit: number;
+  since?: string;
+  from?: string;
+  author?: string;
+  follow?: boolean;
+  cwd?: string;
+}
+
+/**
+ * Get commit history for one or more paths. When paths.length > 1 (symbol
+ * fan-out), git natively dedupes commits across paths. --follow only works
+ * with a single path; auto-disabled otherwise.
+ */
+export function getCommitHistory(opts: CommitHistoryOpts): Commit[] {
+  if (opts.paths.length === 0) return [];
+
+  const args = [
+    "log",
+    "--pretty=format:%x1e%H%x1f%aN%x1f%aI%x1f%ar%x1f%s",
+    "--numstat",
+  ];
+  if (opts.follow && opts.paths.length === 1) args.push("--follow");
+  if (opts.limit > 0) args.push(`-n${opts.limit}`);
+  if (opts.since) args.push(`--since=${opts.since}`);
+  if (opts.author) args.push(`--author=${opts.author}`);
+  if (opts.from) args.push(`${opts.from}..HEAD`);
+  args.push("--");
+  for (const p of opts.paths) args.push(p);
+
+  const execOpts = {
+    cwd: opts.cwd ?? process.cwd(),
+    encoding: "utf-8" as const,
+    timeout: 10_000,
+    maxBuffer: 16 * 1024 * 1024,
+  };
+
+  let output: string;
+  try {
+    output = execFileSync("git", args, execOpts);
+  } catch {
+    return [];
+  }
+
+  const records = output.split("\x1e").filter((r) => r.length > 0);
+  const commits: Commit[] = [];
+  for (const record of records) {
+    const lines = record.split("\n");
+    if (lines.length === 0) continue;
+    const headerFields = lines[0].split("\x1f");
+    if (headerFields.length < 5) continue;
+    const [hash, author, isoDate, relDate, subject] = headerFields;
+
+    const numstatLines: { added: number; removed: number; path: string }[] = [];
+    let insertions = 0;
+    let deletions = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const parts = line.split("\t");
+      if (parts.length < 3) continue;
+      // Binary diffs report '-' for added/removed; treat as 0.
+      const added = parts[0] === "-" ? 0 : Number.parseInt(parts[0], 10);
+      const removed = parts[1] === "-" ? 0 : Number.parseInt(parts[1], 10);
+      const path = parts.slice(2).join("\t");
+      if (Number.isFinite(added)) insertions += added;
+      if (Number.isFinite(removed)) deletions += removed;
+      numstatLines.push({
+        added: Number.isFinite(added) ? added : 0,
+        removed: Number.isFinite(removed) ? removed : 0,
+        path,
+      });
+    }
+
+    commits.push({
+      hash,
+      shortHash: hash.slice(0, 7),
+      author,
+      isoDate,
+      relDate,
+      subject,
+      filesChanged: numstatLines.length,
+      insertions,
+      deletions,
+      numstatLines,
+    });
+  }
+  return commits;
+}
+
 /**
  * Get untracked files (not yet added to git).
  * Returns absolute paths.
